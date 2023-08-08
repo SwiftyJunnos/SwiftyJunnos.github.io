@@ -1,0 +1,390 @@
+---
+title: '🎊 WWDC23 - SwiftData'
+date: '2023-06-11'
+tags: ['Swift', 'WWDC23']
+draft: false
+summary: 'Swifty한 로컬 DB의 시작'
+---
+
+# WWDC23 - SwiftData
+
+오늘은 SwiftData를 알아볼거에요
+Widget에다 써먹어야되거든요 😄
+
+저는 일단 CoreData를 써본 적이 없습니다.
+아마 조만간 쓸 것 같기는 한데.. 일단은 없어요..
+왜 안썼냐면요.. 슬쩍 봐도 파일이 너무 여기저기 분산되게 되는 것 같더라구요..
+전용의 파일 형식도 있고 말이죠…?
+그래서 대신 Realm을 자주 썼었습니다.
+
+그런데.. SwiftData가 새로 나왔어요!
+iOS 17부터 지원해서 실무에서는 4~5년 뒤에나 쓰게 될 것 같지만 나온게 어딘가요 😂
+일단 Schema를 정의해주는 과정부터 너무 간단합니다.
+
+출발해보죠!
+
+## Using the Model Macro
+
+SwiftData의 **Schema** 는 일반 클래스에 **`@Model` 매크로** 를 붙여주는 것으로 끝입니다.
+
+```swift
+import SwiftData
+
+@Model
+class Trip {
+  var name: String
+  var destination: String
+  var endDate: Date
+  var startDate: Date
+
+  var bucketList: [BucketListItem]? = []
+  var livingAccommodation: LivingAccommodation?
+}
+```
+
+너무 쉽고 간단하죠..?
+
+`@Model` 매크로는 클래스 내부의 **Stored Property** 들을 **Persisted Property** 로 바꿔줍니다.
+
+사용할 수 있는 타입들은 이렇습니다.
+
+- 기본적인 Value Types (`Int`, `String`, …)
+- `struct`
+- `enum`
+- `Codable`
+- [ANY VALUE TYPE]
+
+다른 `@Model` 클래스를 참조하는 것으로 관계 구조를 형성할 수도 있습니다.
+
+- `[BucketListItem]?` 와 같은..
+
+> SwiftData 클래스와 실제 사용되는 클래스는 동일한가요?
+
+개인적으로 가장 궁금한 점이였습니다.
+
+```swift
+public protocol Storable {
+  associatedtype RealmObject: RealmSwift.Object
+  associatedtype PropertyValue: PropertyValueType
+
+  /// 데이터 모델의 식별자로 사용되는 프로퍼티
+  var identifier: Int { get }
+
+  init(realmObject: RealmObject)
+  func realmObject() -> RealmObject
+}
+```
+
+Realm을 사용하다보니 DB에서 사용하는 Data 구조체와 실제로 사용되는 도메인 형태의 구조체는 다른 구조체를 사용하곤 했거든요..
+(보통 멀티 쓰레딩의 과정에서 문제들이 발생했습니다.)
+
+하지만 SwiftData는 저희가 원래 사용하던 코드와 별 차이가 없도록 애플이 노력했기 때문에 **Model 클래스를 직접적으로 UI 레이어 등에서 사용할 수 있다** 고 합니다.
+
+---
+
+`@Attribute` 와 `@Relationship` 으로 프로퍼티에 추가적인 제어를 할 수 있습니다.
+
+### @Attribute
+
+```swift
+@Attribute(.unique) var name: String
+```
+
+`@Attribute(.unique)` 로 **PK**를 설정해줄 수 있습니다. PK로 설정된 프로퍼티와 같은 값을 가진 모델이 Create에 대응되는 `insert()`로 인해 추가될 때 Update에 대응되는 `upsert()`로 전환되는 효과를 가집니다.
+
+```swift
+@Attribute(originalName: "start_date") var startDate: Date
+```
+
+`@Attribute(originalName)`으로는 Migration이 가능합니다. 프로퍼티의 이름은 바꾸고 싶지만 데이터는 그대로 남겨두고 싶을 때 사용할 수 있습니다.
+
+그 외에도
+
+- 외부 대용량 데이터 사용
+- Transformable
+- Spotlight
+- Hash 수정
+
+등의 작업이 가능하다고 하네요.
+
+### @Relationship
+
+각 모델간 Relationship이 설정되어 있을 때, 삭제 정책의 기본값은 **Nullify** 입니다.
+
+예시로 살펴보면 `Trip`이 삭제됐을때, `BucketListItem`과 `LivingAccommodation`의 Inverse Relationship으로 등록되어 있던 `trip`이라는 프로퍼티가 **NULL**이 되는 것이죠.
+
+하지만 `.cascade` 정책으로 Nullify 대신 **함께 삭제** 되도록 할 수도 있습니다.
+
+```swift
+@Relationship(.cascade) var bucketList: [BucketListItem]? = []
+```
+
+- originalName
+- toMany Relationship일 때의 개수 제한
+- Hash 수정
+
+### @Transient
+
+```swift
+@Transient var tripViews: Int = 0
+```
+
+`@Transient` 매크로를 사용하면 해당 프로퍼티가 SwiftData로 쓰이는 것을 막을 수도 있습니다.
+
+대신 해당 프로퍼티는 **기본값** 을 꼭 가져야만 합니다.
+
+## Evolving Schemas
+
+앱을 개발하거나 상용화를 한 이후에도 DB의 구조는 언제든지 바뀔 수 있습니다.
+
+때문에 Migration은 필수적인 요건이죠.
+
+SwiftData도 `VersionedSchema`와 `SchemaMigrationPlan`을 통해 이를 지원합니다.
+
+```swift
+enum SampleTripSchemaV1: VersionedSchema {
+  static var models: [any PersistentModel.Type] {
+    [Trip.self, BucketListItem.self, LivingAccommodation.self]
+  }
+
+  @Model
+  final class Trip {
+    var name: String
+    var destination: String
+    var start_date: Date
+    var end_date: Date
+
+    var bucketList: [BucketListItem]? = []
+    var livingAccommodation: LivingAccommodation?
+}
+```
+
+```swift
+enum SampleTripSchemaV2: VersionedSchema {
+  static var models: [any PersistentModel.Type] {
+    [Trip.self, BucketListItem.self, LivingAccommodation.self]
+  }
+
+  @Model
+  final class Trip {
+    @Attribute(.unique) var name: String
+    var destination: String
+    @Attribute(originalName: "srart_date") var startDate: Date
+    @Attribute(originalName: "end_date") var endDate: Date
+
+    var bucketList: [BucketListItem]? = []
+    var livingAccommodation: LivingAccommodation?
+}
+```
+
+`SchemaMigrationPlan`으로는 이렇게 바꾼 데이터들을 어떤 순서대로 변경할지 등의 세부적인 사항들을 정할 수 있습니다.
+
+```swift
+enum SampleTripsMigrationPlan: SchemaMigrationPlan {
+  static var schemas: [any VersionedSchema.Type) {
+    [SampleTripsSchemaV1.self, SampletripsSchemaV2.self, SampleTripSchemaV3.self]
+
+  static var stages: [MigrationStage] {
+    [migrateV1toV2]
+  }
+
+  static let migrateV1toV2 = MigrationStage.custom(
+    fromVersion: SampleTripSchemaV1.self
+    toVersion: SampleTripSchema2.self    ,
+    willMigrate: { context in
+      let trips = try? context.fetch(FetchDescriptor<SampleTripsSchemaV1.Trip>())
+      try? context.save()  
+    }, didMigrate: nil
+  )
+}
+```
+
+# Working with your Data
+
+## Model Container
+
+**Schema** 는 단순히 “어떤 형태로 저장되는 지에 대한 가이드라인” 정도의 역할이기 때문에 실제로 데이터를 저장하는 무언가도 있어야겠죠?
+
+그것이 바로 **Model Container** 입니다.
+
+![](https://i.imgur.com/w4vklF0.png)
+
+Model Container는 Schema를 사용하여 실제로 데이터베이스를 구축합니다.
+
+그리고 이렇게 인스턴스화 된 각 데이터들(Persistence)은 **Model Context** 를 통해서 접근이 가능하죠.
+
+그러니까 **Model Container** 는 **Schema와 Persistence 사이의 연결목** 역할을 하는겁니다.
+
+Model Container는 이런 작업들을 합니다.
+
+- 버전 관리
+- Migration
+- Graph 분리
+
+Container 인스턴스를 생성하는 것은 간단합니다.
+
+```swift
+import SwiftData
+
+let container = try ModelContainer(for: [Trip.self,
+                                         BucketListItem.self,
+                                         LiveAccommodation.self])  
+```
+
+그리고 더 복잡한 형태의 DB를 구축할 수 있도록 추가적인 `Configuration`도 제공합니다.
+
+```swift
+import SwiftData
+
+let container = try ModelContainer(for: [Trip.self, LivingAccommodation.self],
+                                   configuration: ModelConfiguration(url: URL("path")))         
+```
+
+## Model Configuration
+
+```swift
+let fullSchema = Schema([Trip.self,
+                         BucketListItem.self,
+                         LivingAccommodations.self,
+                         Person.self,
+                         Address.self])
+
+let trips = ModelConfiguration(schema: Schema([Trip.self,
+                                               BucketListItem.self,
+                                               LivingAccommodations.self]),
+                               url: URL(filePath: "/path/to/trip.store"),
+                               cloudKitContainerIdentifier: "com.example.trips")
+
+let people = ModelConfiguration(schema: Schema([Person.self,
+                                                Address.self]),
+                                url: URL(filePath: "/path/to/people.store"),
+                                cloudKitContainerIdentifier: "com.example.people")
+
+let container = try ModelContainer(for: fullSchema, trips, people)    
+```
+
+**ModelConfiguration** 을 통해서는
+
+- Schema의 Persistence를 설명하거나 (메모리 혹은 디스크)
+- 저장되는 위치를 지정하거나
+- Read-Only 모드도 지원하고
+- CloudKit을 사용하는 경우 identifier를 제공합니다.
+
+위 예시의 경우 `trips`와 `people`의 그래프를 저장되는 위치와 CloudKit의 identifier를 분리해서 다르게 설정해주고 있네요.
+
+이후, **ModelContainer** 를 생성할 떄 만들어둔 Schema와 Graph들을 하나로 묶어 생성하고 관리할 수 있습니다.
+
+## Model Context
+
+**Model Context** 는 Model에 생기는 변화를 관찰하다가 트리거되는 행동들을 수행합니다.
+
+**1. 업데이트를 추적하고**, **2. 데이터를 fetch하고**, **3. 변경점을 저장하고**, **4. 변경점을 취소**하는 등의 작업이 가능합니다.
+
+```swift
+import SwiftData
+
+let context = container.mainContext
+let context = ModelContext(container)  
+```
+
+이것이 어떻게 가능하냐!? 하면, ModelContext는 일종의 **Snapshot** 처럼 작동합니다.
+
+변화가 일어날 때마다 Model의 Snapshot을 찍어 그 때의 상태를 저장해두는 것이죠.
+
+덕분에 삭제, 수정과 같은 변화가 이루어져도 **어떤 인스턴스가 삭제됐고, 수정되었는지에 대한 정보** 를 담고 있을 수 있습니다.
+
+그래서 주의할 점은 ModelContext의 변경점들은 `context.save()` 를 통해 저장하지 않으면 적용되지 않습니다.
+
+### Undo with ModelContext
+
+**Model Container** 에는 기본적으로 `undoManager`가 포함되어 있습니다.
+
+세 손가락으로 스와이프, 흔들어서 입력 취소 등 시스템이 기본적으로 제공하는 제스처들을 자동으로 지원한다는 그런 얘기입니다..
+
+### ModelContext AutoSave
+
+```swift
+.modelContainer(for: Trip.self, isAutosaveEnabled: false)
+```
+
+Undo뿐만 아니라 자동 저장도 지원하고 있습니다.
+
+앱이 백그라운드 상태로 가거나 종료될 때, 혹은 앱이 사용됨에 따라 자동적으로 Context를 저장하는 기능입니다.
+
+Fetch한 값들은 기존에 있던 `SortDescriptor`와 새로운 `Predicate`, `FetchDescriptor`를 사용해 정렬하거나 필터할 수 있습니다.
+
+### Predicate
+
+```swift
+let tripPredicate = #Predicate<Trip> { $0.destination == "New York" }
+```
+
+```swift
+let tripPredicate = #Predicate<Trip> {
+  $0.destination == "New York" &&
+  $0.name.contains("birthday")
+}
+```
+
+`#Predicate` 매크로를 사용해 수행할 수 있으며 기존의 `filter`와 비슷한 역할을 수행합니다.
+
+기존의 `filter`는 `.filter { }.filter { }`와 같이 줄줄이 조건을 추가해줘야 했던 반면, **하나의 클로저 내부에서 모든 조건들을 검사** 할 수 있는 점이 특징입니다.
+
+### Fetch Descriptor
+
+```swift
+let descriptor = FetchDescriptor<Trip>(predicate: tripPredicate)
+
+let trips = try context.fetch(descriptor)
+```
+
+`FetchDescriptor`는 위에서 살펴본 `Predicate`를 `context`에 적용시켜주는 역할을 합니다.
+
+```swift
+let descriptor = FetchDescriptor<Trip>(
+  sortBy: SortDescriptor(\Trip.name),
+  predicate: tripPredicate
+)      
+
+let trips = try context.fetch(descriptor)
+```
+
+이렇게 `SortDescriptor`와 조합해서 사용할 수도 있습니다.
+
+```swift
+context.enumerate(descriptor
+                  batchSize: 10000
+                  allowEscapingMutations: true) { trip in
+  // operate on trip
+}
+```
+
+이외에도 enumerate라는 함수도 있습니다.
+
+batchSize는 한 번에 5000개의 오브젝트들을 처리하도록 제한되어 있지만, 이를 10000개로 늘리면 메모리의 할당량을 늘리고, I/O 시간은 줄일 수 있습니다. (메모리 연산을 디스크 처리보다 우선시)
+
+반면 사진, 영화와 같은 데이터들은 batchSize를 줄이는 것이 좋습니다. 메모리 사용량을 줄이면서 I/O 처리량을 늘릴 수 있기 때문이죠. (디스크 처리를 메모리 연산보다 우선시)
+
+# Modifying your Data
+
+SwiftData는 CRUD 작업도 너무 간단합니다!
+
+```swift
+var myTrip = Trip(name: "Birthday Trip", destination: "New York")
+
+// Create
+context.insert(myTrip)
+
+// Delete
+context.delete(myTrip)
+
+try context.save()
+```
+
+> References
+
+[WWDC23 - Meet SwiftData](https://developer.apple.com/wwdc23/10187)
+
+[WWDC23 - Model your Schema with SwiftData](https://developer.apple.com/wwdc23/10195)
+
+[WWDC23 - Dive deeper into SwiftData](https://developer.apple.com/wwdc23/10196)

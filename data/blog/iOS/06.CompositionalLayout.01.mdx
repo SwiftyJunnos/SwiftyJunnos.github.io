@@ -1,0 +1,382 @@
+---
+title: '📱 iOS - CompositionalLayout.01'
+date: '2023-01-28'
+tags: ['Swift', 'iOS']
+draft: false
+summary: 'CollectionView는 만능이다.'
+---
+
+# Compositional Layout
+
+> 높은 반응성을 갖고 유연한 UI 조정이 가능한 item들을 조합하여 사용하는 레이아웃입니다.
+
+애플이 Compositional Layout을 소개하면서 대표적으로 예시를 든 앱이 App Store와 사진 앱입니다.
+
+![Appstore](https://i.imgur.com/HVZBa7K.gif)
+
+여러가지 형태의 레이아웃들이 줄지어 있지만, 이 화면은 단 하나의 `CollectionView`로 이루어져있다고 합니다.
+
+기존의 `FlowLayout`을 사용했다면 각기 다른 레이아웃에 따라 여러개의 `CollectionView`를 사용했어야 했지만 `CompositionalLayout`을 사용하면 하나의 `CollectionView`로 처리할 수 있다는 것이죠.
+
+그러면서도 이전보다 쉬운 API로 구현이 가능하고, 빠르고 메모리 최적화에 더 우수하다고 합니다.
+
+## 기본 개념
+
+`CompositionalLayout`은 세 가지의 핵심 요소에 집중하면 됩니다.
+
+![ItemtoLayout](https://i.imgur.com/pBUzta2.png)
+
+가장 작은 단위인 `Item`이 모여서 `Group` 이 되고, 하나의 줄(row)를 형성합니다.
+
+이 `Group`들은 다시 한번 모여서 `Section` 을 이룹니다. 이렇게 만들어진 모든 `Section`을 `Layout`이 담고 있는 것이죠.
+
+### Size
+
+`CompositionalLayout`이 갖고 있는 이 모든 요소들은 각각의 `size`를 갖고 있습니다.
+
+그리고 `size`는 모두가 알고있듯이 `width`와 `height`, 두 가지 속성으로 이루어져 있습니다.
+
+```swift
+class NSCollectionLayoutSize {
+	init(
+		widthDimension: NSCollectionLayoutDimension,
+		heightDimension: NSCollectionLayoutDimension
+	)
+}
+```
+
+하지만 주의할 점은 이 `width`와 `height`는 스칼라 값이 아닙니다.
+
+그래서 `Float`와 같은 타입이 아니라 `NSCollectionLayoutDimension` 타입의 값을 파라미터로 취합니다.
+
+```swift
+class NSCollectionLayoutDimension {
+	class func fractionalWidth(_ fractionalWidth: CGFloat) -> Self
+	class func fractionalHeight(_ fractionalHeight: CGFloat) -> Self
+	class func absolute(_ absoluteDimension: CGFloat) -> Self
+	class func estimated(_ estimatedDimension: CGFloat) -> Self
+}
+```
+
+총 네 가지 타입으로 구분할 수 있고, 각각을 쉽게 설명하면 다음과 같습니다.
+
+- `fractional`: 상위 컴포넌트(컨테이너)의 크기에 비례하여 크기를 가질 때 사용됩니다.
+  - `.fractionalWidth(0.5)`, `.fractionalHeight(0.3)`
+- `absolute`: 고정된 값의 크기를 가질 때 사용됩니다.
+  - `.absolute(200)`
+- `estimated`: 고정된 값으로 시작되지만 크기가 변동될 때 사용됩니다.
+  - `.estimated(200)`
+
+### Item
+
+`Item`은 화면에 렌더링되는 요소입니다.
+
+`cell`이나 `supplementary view`가 여기에 해당됩니다.
+
+```swift
+class NSCollectionLayoutItem {
+	convenience init(layoutSize: NSCollectionLayoutSize)
+	var contentInsets: NSDirectionalEdgeInsets
+}
+```
+
+초기화할 때 `size`를 정해줘야하고, `contentInsets`를 통해 inset도 정해줄 수가 있네요.
+
+### Group
+
+`Group`은 레이아웃으로서의 가장 기본적인 단위가 되는 요소입니다.
+
+`Group`은 `.horizontal`, `.vertical`, `.custom`의 세가지 형태로 정의해줄 수 있습니다.
+
+각각의 `Group`을 하나의 작은 `FlowLayout`이라고 생각해보면 이해가 쉽습니다.
+
+가로 혹은 세로 한쪽 방향으로 쭉 이어지는 레이아웃이니까요.
+
+한 쪽 방향으로만 진행되는 `Group`이 싫다면 `.custom`을 사용해 직접 구현해줄 수도 있습니다.
+
+```swift
+class NSCollectionLayoutGroup: NSCollectionLayoutItem {
+	class func horizontal(
+		layoutSize: NSCollectionLayoutSize,
+		subitems: [NSCollectionLayoutItem]) -> Self
+	class func vertical(
+		layoutSize: NSCollectionLayoutSize,
+		subitems: [NSCollectionLayoutItem]) -> Self
+	class func custom(
+		layoutSize: NSCollectionLayoutSize,
+		itemProvider: NSCollectionLayoutGroupCustomItemProvider) -> Self
+}
+```
+
+### Section
+
+`Section`은 말 그대로 `Section`을 기준으로 나열되는 `CollectionView`의 `Section`입니다.
+
+기존에 사용하던 Layout들의 `Section`과 동일한 개념입니다.
+
+`dataSource`로부터 `Item`의 개수를 받아와 `Section`을 구성합니다.
+
+```swift
+class NSCollectionLayoutSection {
+	convenience init(layoutGroup: NSCollectionLayoutGroup)
+	var contentInsets: NSDirectionalEdgeInsets
+}
+```
+
+### Layout
+
+그렇다면 레이아웃을 초기화해줄때는 어떻게 하면 될까요?
+
+애플은 두 가지 방법을 제공하고 있습니다.
+
+```swift
+class UICollectionViewCompositionalLayout: UICollectionViewLayout {
+	init(section: NSCollectionLayoutSection)
+	init(sectionProvider: @escaping SectionProvider)
+}
+```
+
+- **`init(section: NSCollectionLayoutSection)`**
+
+레이아웃의 섹션을 직접 지정해주는 방식입니다.
+
+쉽고 간단하지만 현재 사용되는 레이아웃 방식과 차별성이 거의 없습니다.
+
+- **`init(sectionProvider: @escaping SectionProvider)`**
+
+Compositional하게 `Section`들을 구성해주려면 이 방식을 사용해야 합니다.
+
+`@escaping` 클로저가 보이시죠?
+
+이 클로저 안에서 각 `Section`마다의 독립적인 설정을 해줄 수 있습니다.
+
+정확히 해당 과정이 어떻게 이루어지는가는 활용 예시에서 다시 한번 보도록 하겠습니다.
+
+## 활용 예시
+
+### 간단한 테이블 리스트
+
+```swift
+private func configureLayout() -> UICollectionViewLayout {
+	let itemSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(1.0),
+		heightDimension: .fractionalHeight(1.0)
+	)
+	let item = NSCollectionLayoutItem(layoutSize: itemSize)
+
+	let groupSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(1.0),
+		heightDimension: .absolute(44)
+	)
+	let group = NSCollectionLayoutGroup.horizontal(
+		layoutSize: groupSize,
+		subItems: [item]
+	)
+
+	let section = NSCollectionLayoutSection(group: group)
+
+	let layout = UICollectionViewCompositionalLayout(section: section)
+	return layout
+}
+```
+
+![TableList](https://i.imgur.com/bJqs3XR.png)
+
+가장 간단한 형태의 Layout이라고 볼 수 있습니다.
+
+한가지 주목할 점은 이 경우에 각 cell의 `size`를 `Item`이 아니라 `Group`을 활용해서 정해주었다는 점입니다.
+
+`.horizontal` 방향의 `Group`에는 각각 하나의 `Item`만을 갖고 있는 형태이기 때문에 활용할 수 있는 방법입니다.
+
+그래서 `itemSize`의 크기는 width, height 모두 `.fractional(1.0)`으로 그룹을 꽉 채워주었죠.
+
+대신 `groupSize`의 크기를 width는 `.fractional(1.0)`, height를 `.absolute(44)`로 지정해주어 가로를 꽉 채우지만 높이는 44로 고정시켜주었습니다.
+
+### 한 줄의 개수가 5개로 고정된 그리드
+
+![VerticalGrid](https://i.imgur.com/id866Ai.png)
+
+![HorizontalGrid](https://i.imgur.com/AuPyn68.png)
+
+이번에는 무조건 한 줄에 무조건 5개의 cell이 들어가고, 정사각형의 형태를 가져야 하는 그리드 형식의 컬렉션뷰입니다.
+
+이 경우는 위에서 사용했던 코드에서 `size` 값만 변경해주는 것 만으로도 쉽게 구현할 수 있습니다.
+
+```swift
+private func configureLayout() -> UICollectionViewLayout {
+	let itemSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(0.2),
+		heightDimension: .fractionalHeight(1.0)
+	)
+	let item = NSCollectionLayoutItem(layoutSize: itemSize)
+
+	let groupSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(1.0),
+		heightDimension: .fractionalWidth(0.2)
+	)
+	let group = NSCollectionLayoutGroup.horizontal(
+		layoutSize: groupSize,
+		subItems: [item]
+	)
+
+	let section = NSCollectionLayoutSection(group: group)
+
+	let layout = UICollectionViewCompositionalLayout(section: section)
+	return layout
+}
+```
+
+각 아이템들의 **width는 그룹 넓이의 20%** (`.fractionalWidth(0.2)`)로, 각 그룹들의 **height는 섹션 넓이의 20%** (`.fractionalWidth(0.2)`)로 지정해주어 정사각형의 형태를 만들어주었습니다.
+
+![GridInset](https://i.imgur.com/OkozR85.png)
+
+```swift
+private func configureLayout() -> UICollectionViewLayout {
+	let itemSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(0.2),
+		heightDimension: .fractionalHeight(1.0)
+	)
+	let item = NSCollectionLayoutItem(layoutSize: itemSize)
+	item.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 5, bottom: 5, trailing: 5)
+
+	let groupSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(1.0),
+		heightDimension: .fractionalWidth(0.2)
+	)
+	let group = NSCollectionLayoutGroup.horizontal(
+		layoutSize: groupSize,
+		subItems: [item]
+	)
+
+	let section = NSCollectionLayoutSection(group: group)
+
+	let layout = UICollectionViewCompositionalLayout(section: section)
+	return layout
+}
+```
+
+`item.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 5, bottom: 5, trailing: 5)` 이 부분만 추가해주면 됩니다!
+
+`inset`의 장점은 Layout의 변화 없이도 실제로 보여지는 각 cell의 크기를 변경해줄 수 있다는 점입니다.
+
+![](https://i.imgur.com/FRRUZMe.png)
+
+이번에는 비슷하지만 그리드 형태지만 다른 방식으로 구현해봅시다.
+
+```swift
+private func configureLayout() -> UICollectionViewLayout {
+	let itemSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(1.0),
+		heightDimension: .fractionalHeight(1.0)
+	)
+	let item = NSCollectionLayoutItem(layoutSize: itemSize)
+
+	let groupSize = NSCollectionLayoutSize(
+		widthDimension: .fractionalWidth(1.0),
+		heightDimension: .absolute(44)
+	)
+	let group = NSCollectionLayoutGroup.horizontal(
+		layoutSize: groupSize,
+		repeatingSubItem: item,
+		count: 2
+	)
+	let spacing: CGFloat = 10.0
+	group.interItemSpacing = .fixed(spacing)
+
+	let section = NSCollectionLayoutSection(group: group)
+	section.interGroupSpacing = spacing
+	section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10)
+
+	let layout = UICollectionViewCompositionalLayout(section: section)
+	return layout
+}
+```
+
+이 경우에 `itemSize`의 width와 height를 모두 `.fractional(1.0)`으로 주었지만, 이 값은 아래의 `Group` 설정에서 override됩니다.
+
+```swift
+let group = NSCollectionLayoutGroup.horizontal(
+	layoutSize: groupSize,
+	subItem: item,
+	count: 2
+)
+```
+
+이렇게 `Item`의 개수를 그룹별로 지정해주면, `CompositionalLayout`이 알아서 `Item`의 크기를 결정해줍니다.
+
+### 여러개의 Section을 갖는 경우
+
+지금까지는 `Section`이 하나인 경우, 즉 `FlowLayout`으로도 별 어려움 없이 구현할 수 있었던 경우들이였습니다.
+
+`CompositionalLayout`이 이걸 위해서 등장한 건 아니였죠.
+
+여러개의 `Section`을 갖고, 각각을 관리할 수 있는 경우를 살펴봅시다.
+
+![Compositional](https://i.imgur.com/854peYX.png)
+
+```swift
+func createLayout() -> UICollectionViewLayout {
+	let layout = UICOllectionViewCompositionalLayout { sectionIndex: Int, layoutEnvironment: NSCollectionLayoutEnvironment -> NSCollectionLayoutSection? in
+		guard let sectionLayoutKind = SectionLayoutKind(rawValue: sectionIndex) else { return nil }
+		let columns = sectionLayoutKind.columnCount
+
+		// 위 경우와 마찬가지로 아래 group 설정에서 override됨
+		let itemSize = NSCollectionLayoutSize(
+			widthDimension: .fractionalWidth(1.0),
+			heightDimension: .fractionalHeight(1.0)
+		)
+		let item = NSCollectionLayoutItem(layoutSize: itemSize)
+		item.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2)
+
+		let groupHeight = columns == 1 ?
+			NSCollectionLayoutDimension.absolute(44) :
+			NSCollectionLayoutDimension.fractionalWidth(0.2)
+		let groupSize = NSCollectionLayoutSize(
+			widthDimension: .fractionalWidth(1.0),
+			heightDimension: groupHeight
+		)
+		let group = NSCollectionLayoutGroup.horizontal(
+			layoutSize: groupSize,
+			subitem: item,
+			count: columns
+		)
+	}
+}
+```
+
+굉장히 굉장히 길어 보이지만 핵심은 하나입니다.
+
+```swift
+let layout = UICollectionViewCompositionalLayout { sectionIndex: Int, layoutEnvironment: NSCollectionLayoutEnvironment -> NSCollectionLayoutSection? in
+	// 
+}
+```
+
+이 부분이죠.
+
+이 모든 설정들은 `SectionProvider` 클로저 안에 있습니다.
+
+그리고 두 개의 파라미터를 제공합니다.
+
+`sectionIndex`는 말 그대로 `Section`의 index고, `layoutEnvironment`는 size나 display scale과 같은 container의 프로퍼티들을 제공해주는 프로토콜입니다.
+
+`SectionLayoutKind`는 `sectionIndex` 값을 파라미터로 받아 `Section`의 종류를 결정해주고, 하나의 column에 몇개의 `Item`이 들어가는지를 정해주는 `enum` 타입입니다.
+
+```swift
+enum SectionLayoutKind: Int, CaseIterable {
+	case list, grid5, grid3
+
+	var columnCount: Int {
+		switch self {
+		case .grid3:
+			return 3
+		case .grid5:
+			return 5
+		case .list:
+			return 1
+		}
+	}
+}
+```
+
+이렇게 `Section`의 index에 따라서 여러 종류의 Layout을 지정해줄 수 있습니다.

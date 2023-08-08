@@ -1,0 +1,329 @@
+---
+title: '🍎 Swift - RxSwift Traits'
+date: '2023-02-22'
+tags: ['Swift']
+draft: false
+summary: 'Coordinator 패턴의 Rx화'
+---
+
+# Traits
+
+`Traits`는 `Observable`의 한 종류라고 볼 수 있습니다.
+
+Traits는 UI 영역에서 복잡하고 다양한 기능이 있는 `Observable` 대신 사용되기 위해 만들어졌습니다.
+
+따라서 RxCocoa와 아주 밀접한 관련이 있지만, 몇몇 기능들은 RxSwift 전반적으로 사용될 수 있기 때문에 RxSwift와 RxCocoa에 나누어 구현되었다고 합니다.
+
+## 등장 이유
+
+Traits를 왜 사용해야하는지부터 알아보도록 하겠습니다.
+
+Traits는 `Observable` 시퀀스가 안전하게 통신될 수 있도록 돕습니다.
+
+모든 방면에서 사용될 수 있는 `Observable`을 대신하여 UI 처리에 특화된 기능과 문법을 제공합니다.
+
+따라서 Traits는 `Observable`이 제공하는 기능의 일부를 떼어낸 것과 다름없기 때문에 사용할지 말지의 여부는 사용자에게 달려있다고 합니다!
+
+## 기본 개념
+
+Traits는 단순히 하나의 `read-only`한 `Observable`을 감싸고 있는 `struct`입니다.
+
+```swift
+struct Single<Element> {
+	let source: Observable<Element>
+}
+
+struct Driver<Element> {
+	let source: Observable<Element>
+}
+```
+
+Traits를 `Observable`로 돌려놓고 싶을 때는 `.asObservable()`로 간단하게 처리할 수 있습니다.
+
+# RxSwift Traits
+
+## Single
+
+Single은 무조건 하나의 값 또는 에러를 방출합니다.
+
+지속적인 값이 아니라 딱 한 번의 결과값이 필요할 떄 사용됩니다.
+
+한 번의 값만을 방출하기 떄문에 `.completed`가 없습니다.
+
+사용되기 가장 좋은 곳은 HTTP 통신을 할 때이며, request에 하나의 응답만이 돌아올 때 사용하면 유용합니다.
+
+```swift
+func getRepo(_ repo: String) -> Single<[String: Any]> {
+	return Single<[String: Any]>.create { single in
+		let task = URLSession.dataTask(with: URL(string: "https://api.github.com/\(repo)")! { data, _, error in
+			if let error {
+				single(.failure(error))
+				return
+			}
+
+			guard let data,
+				let json = try? JSONSerialization.jsonObject(with: data, option: .mutableLeaves),
+				let result = json as? [String: Any] else {
+					single(.failure(DataError.cantParseJSON))
+					return	  
+			}
+
+			single(.success(result))
+		}
+		task.resume()
+
+		return Disposables.create { task.cancel() }
+	}
+}
+```
+
+```swift
+getRepo("ReactiveX/RxSwift")
+	.subscribe(onSuccess: { json in
+			print("JSON: ", json)
+		},
+		onError: { error in
+			print("Error: ", error)
+		})
+	.disposed(by: self.disposeBag)
+```
+
+## Completable
+
+Completable은 `.completed`나 `.error`만을 방출합니다.
+
+한마디로 값(`element`)을 방출하지 않습니다.
+
+작업의 내용은 중요하지 않고, 성공/실패 여부만 중요한 경우에 사용됩니다.
+
+```swift
+func cacheLocally() -> Completable {
+	return Completable.create { completable in
+		guard success else {
+			completable(.error(CacheError.failedCaching))
+			return Disposables.create { }
+		}
+
+		completable(.completed)
+		return Disposables.create { }
+	}
+}
+```
+
+```swift
+cacheLocally()
+	.subscribe(onCompleted: {
+		print("Completed with no error.")
+	},
+	onError: { error in
+		print("Completed with an error: \(error.localizedDescription)")
+	})
+	.disposed(by: self.disposebag)
+```
+
+## Maybe
+
+Maybe는 Single과 Completable의 중간에 있는 Trait입니다.
+
+하나의 값을 방출하거나 방출 없이 `.complete`되거나 `.error`를 방출할 수 있습니다.
+
+```swift
+func generateString() -> Maybe<String> {
+	return Maybe<String>.create { maybe in
+		maybe(.success("RxSwift"))
+		// or
+		maybe(.completed)
+		// or
+		maybe(.error(error))
+
+		return Disposables.create { }
+	}
+}
+```
+
+```swift
+generateString()
+	.subscribe(onSuccess: { element in
+		print("Completed with element \(element)")
+	},
+	.onError { error in
+		print("Completed with an error \(error.localizedDescription)")
+	},
+	onCompleted: {
+		print("Completed with no element")
+	})
+	.disposed(by: self.disposeBag)
+```
+
+# RxCocoa Traits
+
+## Driver
+
+가장 많이 사용되는 Trait입니다.
+
+UI 레이어만을 위해 특별하게 개발된 기능입니다.
+
+특징을 정리해보면 아래와 같습니다.
+
+- 에러가 방출하지 않습니다
+- `observe`가 Main Scheduler에서 이루어집니다.
+- side effect를 공유합니다.
+
+```swift
+let results = query.rx.text
+	.throttle(.milliseconds(300), scheduler: MainScheduler.instance)
+	.flatMapLatest { query in
+		fetchAutoCompleteItems(query)
+	}
+
+results
+	.map { "\($0.count)" }
+	.bind(to: resultCount.rx.text)
+	.disposed(by: self.disposeBag)
+
+results
+	.bind(to: resultsTableView.rx.items(cellIdentifier: "Cell")) { _, result, cell in
+		cell.textLabel?.text = "\(result)"
+	}
+	.disposed(by: self.disposeBag)
+```
+
+위 예시는 세가지 문제점들을 가지고 있습니다.
+
+1. `fetchAutoCompleteItems`가 에러를 방출할 경우, UI에 바인딩되어 있던 것들이 모두 unbind되면서 이후의 쿼리들에 더 이상 UI가 변화하지 않을 것입니다.
+2. `fetchAutoCompleteItems`가 메인쓰레드가 아닌 백그라운드 쓰레드에 결과를 반환할 경우, UI에 결과값을 바인딩하는 작업이 백그라운드 쓰레드에서 일어날 수 있고, 이는 예기치 않은 크래시를 발생시킬 수 있습니다.
+3. 결과값이 두 개의 UI 컴포넌트(TableView, UILabel)에 바인딩되어 있기 때문에 각각이 따로 HTTP request를 요청해 불필요한 중복 요청이 발생합니다.
+
+이를 해결한 코드는 아래와 같습니다.
+
+```swift
+let results = query.rx.text
+	.throttle(.milliseconds(300), scheduler: MainScheduler.instance)
+	.flatMapLatest { query in
+		fetchAutoCompleteItems(query)
+			.observeOn(MainScheduler.instance)
+			.catchErrorJustReturn([])
+	}
+	.share(replay: 1)
+```
+
+예시에서는 이런 과정이 쉬울 수 있으나, 실전에서 프로젝트가 커짐에 따라 이런 사소한 문제점들을 발견하는 것은 어려울 수 있습니다.
+
+따라서 RxCocoa는 이런 문제들을 해결한 UI 레이어 전용의 Trait을 제공하는데, 그것이 바로 Driver인 것 입니다.
+
+```swift
+let results = query.rx.text.asDriver()
+	.throttle(.milliseconds(300), scheduler: MainScheduler.instance)
+	.flatMapLatest { query in
+		fetchAutoCompleteItems(query)
+			.asDriver(onErrorJustReturn: [])
+	}
+
+results
+	.map { "\($0.count)" }
+	.drive(resultCount.rx.text)
+	.disposed(by: self.disposeBag)
+
+results
+	.drive(resultsTableView.rx.items(cellIdentifier: "Cell")) { _, result, cell in
+		cell.textLabel?.text = "\(result)"
+	}
+	.disposed(by: self.disposeBag)
+```
+
+총 세 군데만 주목하면 됩니다!
+
+> `query.rx.text.asDriver()`
+
+`asDriver` 메서드는 `ControlProperty`를 `Driver`로 변환합니다.
+
+`Driver`는 `ControlProperty`의 모든 프로퍼티를 갖기 때문에 따로 신경쓸 부분은 없이 변환만 하면 그대로 사용할 수 있습니다.
+
+> `.asDriver(onErrorJustReturn: [])`
+
+이전에 살펴봤던 다음 세 가지 조건만 만족한다면, 어떤 `Observable`이던 `Driver`로 변환할 수 있습니다.
+
+- 에러가 방출하지 않습니다
+- `observe`가 Main Scheduler에서 이루어집니다.
+- side effect를 공유합니다. (`.share(replay:, scope:)`)
+
+```swift
+let safeSequence = xs
+	.observeOn(MainScheduler.instance)
+	.catchErrorJustReturn(onErrorJustReturn)
+	.share(replay: 1, scope: .whileConnected)
+return Driver(raw: safeSequence)
+```
+
+정리해보면 위 과정과 `asDriver(onErrorJustReturn: [])`은 동일합니다.
+
+> `.drive()`
+
+마지막으로 `bind(to:)` 대신 `drive()`를 사용합니다.
+
+`drive()`를 사용함으로서 UI에 데이터를 안전하게 바인딩할 수 있습니다.
+
+## Signal
+
+구독과 동시에 가장 마지막 이벤트를 `replay`하지 않는다는 점 외에는 Driver와 동일합니다.
+
+하지만 sequence를 공유한다는 점은 변하지 않기 때문에 `share` 메서드를 통해 원할 때는 값을 공유받을 수 있습니다.
+
+# ControlProperty / ControlEvent
+
+## ControlProperty
+
+UI 컴포넌트의 프로퍼티를 내용으로 갖는 `Observable` / `ObservableType` 입니다.
+
+- 실패하지 않습니다.
+- `share(replay: 1)`
+  - Stateful 합니다. (구독과 동시에 마지막 값을 한 번 방출합니다.)
+- 에러를 발생시키지 않습니다.
+- 메인 쓰레드에서 동작합니다.
+
+```swift
+extension Reactive where Base: UISearchBar {
+	public var value: ControlProperty<String?> {
+		let source: Observable<String?> = Observable.deferred { [weak searchBar = self.base as UISearchBar] () -> Observable<String?> in
+			let text = searchBar?.text
+			return (searchBar?.rx.delegate.methodInvoked(#selector(UISearchBarDelegate.searchBar(_:textDidChange:))) ?? Observable.empty())
+				.map { a in
+					return a[1] as? String
+				}
+				.startWith(text)
+		}
+
+		let bindingObserver = Binder(self.base) { (searchBar, text: String?) in
+			searchBar.text = text
+		}
+
+		return ControlProperty(values: source, valueSink: bindingObserver)
+	}
+}
+```
+
+## ControlEvent
+
+UI 컴포넌트의 이벤트를 내용으로 갖는 `Observable` / `ObservableType` 입니다.
+
+- 실패하지 않습니다.
+- 구독이 이루어졌을 때 초기값을 방출하지 않습니다.
+- 에러를 방출하지 않습니다.
+- 메인 쓰레드에서 동작합니다.
+
+```swift
+extension Reactive where Base: UICollectionView {
+	public var itemSelected: ControlEvent<IndexPath> {
+		let source = delegate.methodInvoked(#selector(UICollectionViewDelegate.collectionView(_:didSelectItemAt:)))
+			.map { a in
+				return a[1] as! IndexPath
+			}
+
+		return ControlEvent(events: source)
+	}
+}
+```
+
+> References
+
+[RxSwift Traits](https://github.com/ReactiveX/RxSwift/blob/main/Documentation/Traits.md)

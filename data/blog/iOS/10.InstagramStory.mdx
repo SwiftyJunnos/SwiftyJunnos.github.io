@@ -1,0 +1,220 @@
+---
+title: '📱 iOS - 인스타그램 스토리로 공유하기'
+date: '2023-05-29'
+tags: ['Swift', 'iOS']
+draft: false
+summary: '인싸앱에 인스 공유는 필수니까~'
+---
+
+# 인스타그램 스토리 공유
+
+오늘은 앱에서 얻어낸 사진을 인스타그램 스토리로 공유하는 법을 공부해보겠습니다.
+
+[Instagram - Sharing to stories](https://developers.facebook.com/docs/instagram/sharing-to-stories)
+
+해당 문서를 따라가며 진행해보죠!
+
+## 앱 ID 휙득하기
+
+![](https://i.imgur.com/ndhiNcA.png)
+
+가장 먼저 눈에 띄는 경고문이 있네요!
+
+다른 SDK와 마찬가지로 앱 등록을 해야하나 봅니다. 그런데 1월부터면 그 전에는 그냥 됐던건가…?
+
+Meta 개발자 계정을 만들고 앱을 생성해주면 이렇게 앱 ID를 얻어낼 수 있습니다.
+
+![](https://i.imgur.com/qQKJAtx.png)
+
+## 어떤 이미지를 제공해야할지 확인해보기
+
+그러면 이제 인스타 스토리로 올릴 내용을 제공하려면 어떤 것이 필요한지를 알아야겠죠?
+
+![](https://i.imgur.com/MTQu6I1.png)
+
+이 항목을 살펴보면 스토리는 **Background Layer**와 **Sticker Layer**로 구분되어 있다는 걸 확인할 수 있습니다.
+
+스토리의 배경을 꽉 채운 상태로 고정시키는 이미지는 **Background Layer**로, 유저가 변형하거나 이동시켜 배치시킬 수 있는 이미지는 **Sticker Layer**로 구성해주면 되겠죠?
+
+그러면 어떻게 인스타그램 앱으로 이미지를 전달해줄 수 있을까요?
+
+## 스키마 적용
+
+앱의 콘텐츠를 인스타그램으로 전송하기 위해서는 세 가지 스텝을 거쳐야 합니다.
+
+1. 앱이 인스타그램의 맞춤 URL 스키마를 찾을 수 있는지 확인합니다.
+2. 페이스트보드에 공유하고자 하는 콘텐츠를 할당합니다.
+3. 앱에서 가능한 경우 맞춤 URL 스키마를 찾습니다.
+
+그러면 역시 시작은 다른 SDK와 마찬가지로 앱에 URL 스키마를 등록해주는 것이겠죠?
+
+인스타그램은 `Info.plist` 파일에 있는 `LSApplicationQueriesSchemas`키에 `instagram-stories`를 추가해달라고 합니다.
+
+![](https://i.imgur.com/49aCrs5.png)
+
+주의할 점은 `Array` 타입으로 그 하위에 추가해주어야 합니다. 인스타그램 뿐만 아니라 다른 기능이나 앱들의 스키마들도 등록될 수 있기 때문이죠!
+
+## 코드 작성
+
+이제 인스타그램에 데이터를 전달해주는 코드를 작성해봅시다.
+
+문제는 인스타그램이 예제로 Swift 코드를 제공하는게 아니라 Obj-C 코드를 제공하고 있어요..
+
+상당히 당황스럽지만.. 알잘딱으로 Swift로 변환해서 작성해봅시다.. 😡
+
+우리에겐 이제 GPT라는 무기도 있으니까요!
+
+우선 전달해줄 수 있는 데이터와 타입, 설명은 아래와 같습니다.
+
+![](https://i.imgur.com/t8qnOAJ.png)
+
+### 배경 자산 공유하기
+
+이름을 보아하니 Background Layer를 제공하는 것을 말하는 것이겠죠?
+
+ChatGPT에게 Obj-C 언어를 Swift로 변환해달라고 하니 꽤 그럴듯 해보이는 코드가 나와서 그대로 코드를 적용해보았습니다.
+
+```swift
+  private func shareToInstagram() {
+    if
+      let backgroundImage = UIImage(named: "GiftMock"), // 테스트를 위한 임시 데이터
+      let imageData = backgroundImage.pngData() { // 1️⃣
+      self.backgroundImage(backgroundImage: imageData, appID: URLSchemes.instagramStory.url)
+    }
+  }
+
+  private func backgroundImage(backgroundImage: Data, appID: String) {
+    if let url = URL(string: appID) {
+      if UIApplication.shared.canOpenURL(url) { // 2️⃣
+        let pasteboardItems = [["com.instagram.backgroundImage": backgroundImage]]
+        let pasteboardOptions: [UIPasteboard.OptionsKey: Any] = [
+          .expirationDate: Date(timeIntervalSinceNow: 60 * 5)
+        ]
+        UIPasteboard.general.setItems(pasteboardItems, options: pasteboardOptions) // 3️⃣
+        UIApplication.shared.open(url, options: [:]) // 4️⃣
+      } else {
+        // Error Handling
+      }
+    }
+  }
+```
+
+과정은 생각보다 간단합니다.
+
+1. 인스타그램이 요구하는 데이터의 타입을 맞춰주기 위해 `UIImage` 파일을 `Data` 타입으로 변환해줍니다.
+2. 스키마 URL이 유효한 지 확인합니다. 앱에 등록되지 않은 스키마거나 기기에 설치되어 있지 않은 앱으로 연결 시 에러를 던져냅니다.
+3. 변환한 이미지 파일을 `UIPasteboard`를 활용하여 복사해 저장합니다. `.expirationDate`를 통해 저장 기간을 설정해주었네요.
+4. URL 스키마를 열고 인스타그램 앱의 스토리 추가 화면을 실행합니다.
+
+과연 결과는!
+
+- **Info.plist URL 등록 에러**
+
+![](https://i.imgur.com/yn8P8mT.png)
+
+😏.. 한 번에 될 리가 없죠…
+
+![](https://i.imgur.com/49aCrs5.png)
+
+문제는 이곳에 있었습니다.
+
+분명 `LSApplicationQuriesSchemas`를 등록하라고 했었단 말이죠?
+
+공식 문서를 다시 읽어보고 수 차례 시도해봤지만 진전이 없어 값을 다시 복사-붙여넣기 해보았습니다.
+
+그랬더니..
+
+![](https://i.imgur.com/wekYvQo.png)
+
+아니 글쎄 키 값이 자동으로 바뀌었습니다..
+전에는 대체 왜..
+
+수정을 빠르게 해주고 다시 실행해봅시다.
+과연 이번에는..?
+
+- **데이터가 넘어오지 않는 버그**
+
+![](https://i.imgur.com/2nHxnAc.gif)
+
+오! 뭔가 되는 것 같아요! 🥳
+
+그런데 문제는 이미지 데이터가 넘어오지 않은 것 같죠…?
+
+무엇이 문제일까 또 살펴보던 중.. 사소한 수정을 제가 저질렀다는 사실을 깨달았습니다.
+
+```swift
+let pasteboardItems = [["com.instagram.backgroundImage": backgroundImage]]
+```
+
+바로 이 부분이에요!
+
+`key` 값으로 `"com.instagram.backgroundImage"`를 주고 있죠..
+
+하지만 예제를 보면 `"com.instagram.sharedSticker.backgroundImage"`로 되어 있습니다..
+
+인스타그램 앱의 입장에서 보면 데이터를 찾으려고 살펴본 `key`값에 아무것도 없으니 넘겨받을 수 있는 데이터가 없는 것이였죠..
+
+사실은 저 `key`값은 제 앱에서 클립보드에 저장하기 위한 일종의 ID값이라고 생각하여 수정을 했었습니다.
+
+하지만 “인스타그램이 어떻게 값을 받아오는걸까”를 생각하다보니 코드 상에 데이터를 직접 넘겨주는 로직은 어디에도 없고 데이터와 관련된 값은 저 `pasteboardItems` 밖에 없더군요..
+
+결국은 key-value로 찾아내는 방법밖에 없겠다 싶어 저 부분을 원래대로 수정해보았습니다.
+
+![](https://i.imgur.com/KngAWao.gif)
+
+와! 성공이네요!
+
+배경으로 사진이 들어간 것을 확인할 수 있습니다.
+
+### 스티커 자산 공유하기
+
+여기까지 성공했다면 스티커 레이아웃까지 추가하는 것은 아주 쉽습니다.
+
+```swift
+
+private func shareToInstagram(background: UIImage?, sticker: UIImage?) {
+    if
+      let background, let sticker,
+      let imageData = background.pngData(),
+      let stickerData = sticker.pngData() {
+      self.backgroundImage(
+        backgroundImage: imageData,
+        stickerImage: stickerData,
+        appID: URLSchemes.instagramStory.url
+      )
+    }
+  }
+
+  private func backgroundImage(backgroundImage: Data, stickerImage: Data, appID: String) {
+    if let url = URL(string: appID) {
+      if UIApplication.shared.canOpenURL(url) {
+        let pasteboardItems = [
+          [
+            "com.instagram.sharedSticker.backgroundImage": backgroundImage,
+            "com.instagram.sharedSticker.stickerImage": stickerImage // ✨ 쨔잔
+          ]
+        ]
+
+        let pasteboardOptions: [UIPasteboard.OptionsKey: Any] = [
+          .expirationDate: Date(timeIntervalSinceNow: 60 * 5)
+        ]
+        UIPasteboard.general.setItems(pasteboardItems, options: pasteboardOptions)
+        UIApplication.shared.open(url, options: [:])
+      } else {
+        // Error Handling
+      }
+    }
+  }
+```
+
+이렇게 key-value를 하나만 더 추가해주면 되거든요!
+
+# 완성
+
+![](https://i.imgur.com/pHmq2zP.gif)
+
+자 이렇게 인스타그램 스토리로 원하는 이미지를 공유하는 방법을 공부해보았습니다!
+
+생각보다 굉장히 간단했던 것 같아요!
+
+작업물을 바깥에 공유할 수 있어서 뭔가 뿌듯한 공부였습니다. 😏

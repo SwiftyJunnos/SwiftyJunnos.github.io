@@ -1,0 +1,581 @@
+---
+title: '🎊 WWDC23 - What's new in Swift'
+date: '2023-06-06'
+tags: ['Swift', 'WWDC23']
+draft: false
+summary: '간편 로그인의 첫 걸음, 애플로 로그인'
+---
+
+# WWDC23 - What’s new in Swift
+
+Swift의 새로운 feature, 매크로가 너무 궁금해서 해당 세션부터 찾아보게 되었습니다.
+
+바로 시작해보죠..!
+
+## Expressive Code
+
+### Using if/else and switch Statements as Expressions
+
+와우..
+시작부터 큰 소식이네요..
+`if-else` 구문과 `switch` 구문을 표현식 으로서 사용할 수 있다는 소식입니다.
+
+```swift
+let bullet =
+  isRoot && (count == 0 || !willExpand) ? ""
+    : count == 0    ? "- "
+    : maxDepth <= 0 ? "▹ " : "▿ "
+```
+
+다소 과장되긴 했지만 복잡한 조건에 의해 다양한 값을 `let` 변수에 넣어주고 싶을 때는 위와 같이 삼항연산자를 겹겹이 쌓아가며 사용해야 했습니다.
+하지만 이제 `if-else` 구문으로 읽기 쉽게 가능합니다.
+
+```swift
+let bullet = 
+  if isRoot && (count == 0 || !willExpand) { "" }
+  else if count == 0 { "- " }
+  else if maxDepth <= 0 { "▹ " }
+  else { "▿ " }
+```
+
+이 방식이 특히나 효과를 보는 곳은 전역 변수나 저장 프로퍼티를 사용할 때입니다.
+
+```swift
+let attributedName = {
+  if let displayName, !displayName.isEmpty {
+    AttributedString(markdown: displayName)
+  } else {
+    "Untitled"
+  }
+}()      
+```
+
+전역 변수나 저장 프로퍼티에 조건에 따라 다른 값을 넣어주기 위해서는 이렇게 바로 호출되는 클로저를 통해야만 했습니다.
+
+```swift
+let attributedName =
+    if let displayName, !displayName.isEmpty {
+    AttributedString(markdown: displayName)
+  } else {
+    "Untitled"
+  }
+```
+
+하지만 이제 `if-else` 구문을 표현식으로 사용할 수 있기 때문에 클로저가 필요 없습니다.
+
+### Result Builders
+
+Result Builder가 뭐냐면요..
+
+저도 이번에 처음 알아보게 되었는데요.. WWDC21에서 발표되었던 내용이더라구요..!?
+
+```swift
+image.constraints { view in
+  view.centerXAnchor == container.centerXAnchor
+  view.topAnchor == container.topAnchor + 20
+  view.widthAnchor == container.widthAnchor -- 20
+  view.heightAnchor == view.widthAnchor * 0.6      
+}
+```
+
+마치 이렇게 SwiftUI의 형태처럼 **선언형으로 값을 설정**해줄 수 있는 문법입니다.
+
+**DSL(Domain Specific Language)** 라고 불리는데요..
+
+제가 잘 모르기 때문에… 😅
+
+아무튼 타입 체킹이 빨라지고 에러가 좀 더 정확한 지점에 표시된다고 합니다.
+
+### Type Parameter Packs
+
+이 부분은 **Generic**과 관련된 내용입니다.
+
+Swift의 모든 곳은 Generic이라고도 할 수 있습니다.
+
+배열만봐도 사실은 `Array<Element>`라는 Generic을 활용한 타입이죠!?
+
+```swift
+struct Request<Result> { ... }
+
+struct RequestEvaluator {
+  func evaluate<Result>(_ request: Request<Result>) -> Result
+}
+
+func evaluate(_ request: Request<Bool>) -> Bool {
+  return RequestEvaluator().evaluate(request)
+}
+```
+
+여기 `Bool` 타입의 값을 하나만 받는 함수 `evaluate`가 있습니다.
+
+하지만 여러개의 값을 파라미터로 받고 싶을 때도 있겠죠?
+
+```swift
+let value = RequestEvaluator().evaluate(request)
+let (x, y) = RequestEvaluator().evaluate(r1, r2)
+let (x, y, z) = RequestEvaluator().evaluate(r1, r2, r3)
+```
+
+문제는 이렇게 함수를 사용하려면..
+
+```swift
+func evaluate<Result>(_:) -> (Result)
+func evaluate<R1, R2>(_:_:) -> (R1, R2)
+func evaluate<R1, R2, R3>(_:_:_:) -> (R1, R2, R3)
+func evaluate<R1, R2, R3, R4>(_:_:_:_:)-> (R1, R2, R3, R4)
+func evaluate<R1, R2, R3, R4, R5>(_:_:_:_:_:) -> (R1, R2, R3, R4, R5)
+func evaluate<R1, R2, R3, R4, R5, R6>(_:_:_:_:_:_:) -> (R1, R2, R3, R4, R5, R6)
+```
+
+이렇게 끔찍하게 각 파라미터의 개수에 맞는 함수들을 여러번 오버로드하며 정의해주어야 합니다.
+
+![](https://i.imgur.com/BNkOqNg.png)
+
+이걸 보자마자 RxSwift의 `combineLatest`가 생각나더군요…
+
+딱 이럴때의 경우입니다.
+
+이 방법은 보기에도 안좋을 뿐더러, **제공하는 파라미터의 개수를 사용하는 쪽에서 뛰어넘으면** 당연하게도 컴파일러 에러를 발생시킵니다.
+
+이 문제를 해결하기 위해 Swift의 **Generic**에 **제공된 인자의 개수보다 많은 수의 값**을 받아낼 수 있는 새로운 문법이 도입되었습니다.
+
+새로운 `each` 키워드는 Generic 타입을 충족하는 **다양한 개수의 인자들을 “packed”된 상태** 로 받을 수 있도록 합니다.
+
+```swift
+func evaluate<each Result>(_: repeat Request<each Result>) -> (repeat each Result)   
+```
+
+하나의 파라미터 `Request<Result>` 대신 여러개의 파라미터를 반복해서 받는다는 의미로 `repeat Request<each Result>` 를 사용합니다.
+
+반환하는 값은 인자가 하나일 경우 하나의 값을, 여러 개일 경우 여러 개의 값은 Tuple `(repeat each Result)` 로 반환합니다.
+
+그렇다면 사용하는 쪽에서는 어떨까요?
+
+```swift
+let results = RequestEvaluator.evaluate(r1, r2, r3)
+```
+
+**Type Parameter Packs API**를 사용했는지 조차 알 수 없을 정도로 자연스럽습니다..!
+
+## Swift Macros
+
+대망의 매크로입니다..
+
+`assert`에서부터 시작하고 있네요.
+
+`assert`는 조건문이 `false`일 때, 프로그램을 자동으로 종료시키죠.
+
+```swift
+assert(max(a, b) == c)
+```
+
+![](https://i.imgur.com/07v4MCp.png)
+
+문제는 위와 같은 방식은 프로그램을 그냥 종료시켜버리고, 종료된 라인만을 로그에 남긴다는 것입니다.
+
+그래서 애플은 다른 여러가지 `assert` 방식들을 추가해줬습니다.
+
+![](XCAssertEqual(max(a, b), c))
+
+![](https://i.imgur.com/midJKz4.png)
+
+`XCAssertEqual`은 좀 더 나은 로그를 남겨줍니다. 아까보다는 훨씬 낫긴 하지만 여전히 `a`, `b`, 혹은 `max(a, b)` 중에서 어떤 값이 에러를 발생시키는지는 여전히 알 수가 없죠.
+
+하지만 이제는 **Macro**를 사용해서 이를 해결할 수 있습니다.
+
+```swift
+#assert(max(a, b) == c)
+```
+
+![](https://i.imgur.com/ehe3hwP.png)
+
+매크로는 다른 API들과 비슷하게 패키지의 형태로 `import`하여 사용할 수 있습니다.
+
+여기서 사용한 `#assert` 매크로는 PowerAssert라는 라이브러리를 설치해서 사용할 수 있네요.
+
+📎 [PowerAssert](https://github.com/kishikawakatsumi/swift-power-assert)
+
+### Macro Declarations
+
+이름이 매크로라면 내가 직접 원하는 형태의 매크로를 사용할 수도 있어야겠죠?
+
+`macro` 키워드를 사용함으로써 매크로를 정의해줄 수 있습니다.
+
+```swift
+public macro assert(_ condition: Bool)
+```
+
+함수와 상당히 비슷하게 생겼죠..?
+
+함수와 동일하게 정의해줄 수 있고, 함수와 마찬가지로 타입 체크도 이루어집니다.
+
+그래서 이 `assert` 매크로를
+
+```swift
+#assert(max(a, b))
+```
+
+이렇게 잘 못 사용하면?
+
+![](https://i.imgur.com/K5FdL8w.png)
+
+```swift
+public macro assert(_ condition: Bool) = #externalMacro(
+  module: "PowerAssertPlugin",
+  type: "PowerAssertMacro"
+)     
+```
+
+대부분의 매크로는 **“External Macros”** 라고 합니다.
+
+컴파일러는 매크로를 `String`으로 제공되는 `module` 정보와 `type` 정보를 통해 식별한다고 하네요..
+
+![](https://i.imgur.com/UoYsO85.png)
+
+매크로는 컴파일러 플러그인으로 작동하며 앱과는 **별도의 프로그램** 으로써 실행된다고 합니다.
+
+컴파일러는 플러그인에게 매크로를 전달하고, 플러그인이 매크로에 대응되는 소스코드를 컴파일러에게 제공하고 있네요.
+
+매크로에게 필요한 마지막 정보는 그들의 **역할(role)** 입니다.
+
+### Freestanding Macros
+
+```swift
+@freestanding(expression)
+public macro assert(_ condition: Bool) = #externalMacro(
+  module: "PowerAssertPlugin",
+  type: "PowerAssertMacro"
+)        
+```
+
+`#assert` 매크로는 `@freestanding(expression)` 매크로인데요..
+
+**freestanding** 은 “#”로 사용할 수 있고, 대응되는 코드를 직접적으로 삽입하기 때문에 사용되었습니다.
+
+**expression** 은 결과값이 있는 그 어느곳에서도 사용할 수 있기 때문에 사용되었다고 하네요.
+
+```swift
+@freestanding(exrpession)
+public macro Predicate<each Input>(
+  _ body: (repeat each Input) -> Bool
+) -> Predicate<repeat each Input>
+
+let pred = #Predicate<Person> {
+  #0.favoriteColor == .blue
+}
+let blueLovers = people.filter(pred)    
+```
+
+expression 매크로에는 `#Predicate` 라는 매크로도 있습니다.
+
+`#Predicate` 매크로는 클로저 안에서 type-safe하게 Predicate를 작성할 수 있도록 해준다고 하네요.
+
+### Attached Macros
+
+또 형태의 매크로도 있습니다.
+
+예시로 사용할 `enum`을 사용할 경우인데요.
+
+```swift
+enum Path {
+  case relative(String)
+  case absolute(String)
+}
+
+extension Path {
+  var isAbsolute: Bool {
+    if case .absolute = self { true }
+    else { false }
+  }
+}
+
+extension Path {
+  var isRelative: Bool {
+    if case .relative = self { true }
+    else { false }
+  }
+}
+
+let absPaths = paths.filter { $0.isAbsolute }        
+```
+
+`enum`의 `case`를 검사할 때 보통 이렇게 많이 사용했습니다.
+
+이런 방식은 문제가 있습니다. `case`가 늘어날수록 점점 더 길어지는 방식의 코드라는 것이죠.
+
+```swift
+@CaseDetection
+enum Path {
+  case relative(String)
+  case absolute(String)
+}
+
+let absPaths = paths.filter { $0.isAbsolute }
+```
+
+`@CaseDetctio`n은 **“Attached Macros”** 입니다.
+
+Property Wrapper와 동일하게 **“@“** 를 사용하고 있네요!
+
+이 `@CaseDetection` 매크로는 이전의 `isAbsolute`와 `isRelative` 프로퍼티를 자동으로 생성해줍니다.
+
+![](https://i.imgur.com/4WYMXt5.png)
+**
+Attached Macros** 는 다섯 가지 종류로 나눌 수 있고, 각각의 역할은 위와 같습니다.
+
+- **member**
+  - `type` / `extension`으로 새로운 정의를 추가
+  - ex) `@CaseDetection`
+
+- **peer**
+  - 정의된 표현과 함께 다른 표현으로써 정의를 추가
+  - ex) `async` 메서드와 같은 로직을 수행하는 completion handler 버전의 메서드 추가
+
+- **accessor**
+  - 프로퍼티에 접근하는 방식을 추가 (Property Wrapper와 유사)
+  - ex) 저장 프로퍼티를 연산 프로퍼티로 변경
+
+- **memberAttribute**
+  - `type` / `extension`으로 속성(attribute)를 추가
+
+- **conformance**
+  - `type` / `extension`으로 프로토콜을 충족시키기 위한 요소 추가
+
+일반적인 API와 다르게 매크로가 좋은 점은, 코드에서 바로 **어떤 코드** 가 실행되고 있는 지 확인할 수 있고, **디버그 과정에서 진입** 할 수 있으며, 매크로 영역 바깥으로 복붙하는 것으로 **쉽게 수정** 할 수도 있다는 것입니다.
+
+**Attached Macros** 들은 동시에 여러개가 사용될수도 있습니다.
+
+예시로 SwiftUI의 코드를 들고 있는데요.. 무슨 의미인지는 알 것 같아서 한 번 살펴보겠습니다.
+
+```swift
+// Observation in SwiftUI
+final class Person: ObservableObject {
+  @Published var name: String
+  @Published var age: Int
+  @Published var isFavorite: Bool
+}
+
+struct ContentView: View {
+  @ObservedObject var person: Person
+    
+  var body: some View {
+    Text("Hello, \(person.name)")
+  }
+}
+```
+
+이런 형태의 클래스가 있는데요, `Person`의 각 프로퍼티들의 변화를 받아 `ContentView`의 내용을 업데이트해주는 코드 같습니다.
+
+문제는 반복되는 `@Published`, `ObservableObject` 프로토콜 등 필요한 부가작업들이 너무 많다는 것이죠.
+
+매크로를 사용하면 이 과정들을 하나로 축소시킬 수 있습니다.
+
+```swift
+// Observation in SwiftUI
+@Observable final class Person {
+  var name: String
+  var age: Int
+  var isFavorite: Bool
+}
+
+struct ContentView: View {
+  var person: Person
+    
+  var body: some View {
+    Text("Hello, \(person.name)")
+  }
+}
+```
+
+`@Observable` 하나면 모든 작업이 수행됩니다.
+
+내부를 한 번 살펴볼까요?
+
+```swift
+@attached(member, names: ...)
+@attached(memberAttribute)
+@attached(conformance)
+public macro Observable() = #externalMacro(...).
+```
+
+1. `member` role을 통해 새로운 프로퍼티들과 메서드들을 추가합니다.
+2. `memberAttribute` role을 통해 `@ObservationTracked` 매크로를 각 저장 프로퍼티에 추가하고 `getter`와 `setter`를 추가합니다.
+3. `Observable` 프로토콜을 채택합니다.
+
+매크로를 펼친 형태의 코드는 이렇습니다.
+
+```swift
+@Observable final class Person: Observable {
+  @ObservationTracked var name: String { get { … } set { … } }
+  @ObservationTracked var age: Int { get { … } set { … } }
+  @ObservationTracked var isFavorite: Bool { get { … } set { … } }
+  
+  internal let _$observationRegistrar = ObservationRegistrar<Person>()
+  internal func access<Member>(
+    keyPath: KeyPath<Person, Member>
+  ) {
+    _$observationRegistrar.access(self, keyPath: keyPath)
+  }
+  internal func withMutation<Member, T>(
+    keyPath: KeyPath<Person, Member>,
+    _ mutation: () throws -> T
+  ) rethrows -> T {
+    try _$observationRegistrar.withMutation(of: self, keyPath: keyPath, mutation)
+  }
+}
+```
+
+매크로에 대해서는 한 번 관련 세션을 살펴보면서 공부해봐야겠네요.
+
+새로운 패러다임의 시작일 듯한 느낌..!
+
+## Swift Foundation
+
+최근 애플이 Foundation 코드들을 Swift로 다시 쓰는 프로젝트를 시작했다고 합니다.
+
+기존의 C, Obj-C 코드들을 Swift로 교체하고 있다고 하네요..
+
+이번 버전에는 `Date`, `Calendar`, `Locale`, `AttributedString`, JSON `encode` / `decode`가 Swift로 다시 쓰여졌다고 합니다.
+
+![](https://i.imgur.com/dHcf3vk.png)
+
+네.. 그렇다고 합니다..
+
+넘어가죠!
+
+## Ownership
+
+어떤 값을 어떤 코드가 소유하고 있는 지에 대한 추적이 가능해졌다고 합니다.
+
+저는 코드 작성자가 누군지 시그니처 같은 걸 남겨두는 건 줄 알았는데, 전혀 다른 기능이였네요.
+
+```swift
+struct FileDescriptor {
+  private var fd: CInt
+  
+  init(descriptor: CInt) { self.fd = descriptor }
+
+  func write(buffer: [UInt8]) throws {
+    let written = buffer.withUnsafeBufferPointer {
+      Darwin.write(fd, $0.baseAddress, $0.count)
+    }
+    // ...
+  }
+
+  func close() {
+    Darwin.close(fd)
+  }
+}
+```
+
+이 코드는 위험성이 있습니다.
+
+파일 수정을 마친 후에 `close()`를 호출하지 않을 가능성이 농후하죠.
+
+`FileDescriptor`를 클래스로 바꾸고 `deinit` 시점에 `close()`를 호출해줘도 되지만, 클래스는 reference 타입이기 때문에 하나의 파일을 관리하는 측면에서는 위험성이 큽니다.
+
+```swift
+struct FileDescriptor: ~Copyable {
+  private var fd: CInt
+  
+  init(descriptor: CInt) { self.fd = descriptor }
+
+  func write(buffer: [UInt8]) throws {
+    let written = buffer.withUnsafeBufferPointer {
+      Darwin.write(fd, $0.baseAddress, $0.count)
+    }
+    // ...
+  }
+  
+  consuming func close() {
+    Darwin.close(fd)
+  }
+  
+  deinit {
+    Darwin.close(fd)
+  }
+}
+```
+
+그래서 등장한 것이 **Non-Copyable** `struct` 입니다.
+
+**~Copyable** 을 붙여주면, 클래스와 마찬가지로 `deinit`을 사용할 수 있게 됩니다.
+
+추가적으로 `consuming` 이라는 키워드도 등장했는데요, 해당 키워드가 달린 함수를 호출함으로써 구조체에 대한 소유권을 포기할 수 있습니다.
+
+Non-Copyable 구조체는 복사될 수 없으니, 소유권을 포기하게 되면 접근할 수 없는 값이 되겠죠?
+
+그래서 `consuming` 함수는 클래스를 메모리에서 해제하는 것처럼 구조체를 **메모리에서 해제** 시킵니다.
+
+## What’s new in Swift Concurrency
+
+**Custom Actor Executors** 라는 녀석이 새롭게 나왔습니다.
+
+기존의 Actor라는 놈은 자유롭게 사용할 수 있는 녀석은 아니였죠?
+
+이제 Actor를 특정 **DispatchQueue** 에 할당시킬 수 있다고 합니다.
+
+```swift
+actor MyConnection {
+  private var database: UnsafeMutablePointer<sqlite3>
+  private let queue: DispatchSerialQueue
+
+  nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
+
+  init(filename: String, queue: DispatchSerialQueue) throws { … }
+  
+  func pruneOldEntries() { … }
+  func fetchEntry<Entry>(named: String, type: Entry.Type) -> Entry? { … }
+}
+
+await connection.pruneOldEntries()
+```
+
+`unownedExecutor`를 이렇게 지정해주면, 모든 Synchronization이 해당 queue에서만 이루어진다고 하네요.
+
+단순히 `await connection.pruneOldEntries()`를 호출해주는 것 만으로도 지정된 `queue`에서 `async`하게 동작한다는 것이죠!
+
+이제 Realm을 다루기 좀 더 쉬워지는 걸까요.. 최근에 이걸로 고민을 많이 했는데 말이죠..
+
+```swift
+// Executor protocols
+
+protocol Executor: AnyObject, Sendable {
+  func enqueue(_ job: consuming ExecutorJob)
+}
+
+protocol SerialExecutor: Executor {
+  func asUnownedSerialExecutor() -> UnownedSerialExecutor
+  func isSameExclusiveExecutionContext(other executor: Self) -> Bool
+}
+
+extension DispatchSerialQueue: SerialExecutor { … }
+```
+
+아무튼 이 새로운 동작은 DispatchQueue가 새로운 `SerialExecutor` 프로토콜을 따르기 때문에 가능했다고 합니다.
+
+`isSameExclusiveExecutionContext(other executor:) -> Bool`을 통해 이미 해당 코드가 실행되고 있는 지를 검사하고, `asUnownedSerialExecutor() -> UnownedSerialExecutor`를 통해 `Executor`의 `unowned` 참조를 가져온다고 합니다.
+
+그리고 가장 중요한 `enqueue(_ job:)` 를 통해 `Executor`의 **Job** 들을 관리한다고 하네요.
+
+여기서 **Job** 이란 `Executor`에서 비동기적으로 실행되어야 할 동기 Task라고 합니다.
+
+솔직히 무슨 말인지 너무 헷갈리네요… 😅
+
+결론은 이제 “**Actor** 에서 **DispatchQueue** 를 지정해서 사용할 수 있고, 이는 DispatchQueue가 새로운 `SerialExecutor` 프로토콜을 따르기 때문이다. `SerialExecutor` 프로토콜은 dispatch async를 포함한 여러 **Job** 들을 순차적으로 `queue` 를 통해 수행해나가는 작업을 한다.” 라고 이해하고 넘어가려고 합니다.
+
+---
+
+와우..
+
+뒤로 갈수록 정신이 아득해질 뻔 했지만.. 한 번 쭉 훑어보긴 했습니다..
+
+당장 저에게 제일 중요했던 내용들은
+
+1. Macros
+2. Type Parameter Packs
+3. DispatchQueue in Actor
+
+이렇게인 것 같아요!
+
+특히나 매크로는 제대로 한 번 살펴봐야 할 것 같습니다..

@@ -1,0 +1,268 @@
+---
+title: '🍎 Swift - RxFlow'
+date: '2023-01-26'
+tags: ['Swift']
+draft: false
+summary: 'Coordinator 패턴의 Rx화'
+---
+
+# RxFlow
+Favor 프로젝트는 ReactorKit을 사용하여 MVVM-C패턴에 RxSwift를 적극적으로 활용하고 있습니다.
+
+하지만 저희 프로젝트에서 Reactive하지 못한 부분이 하나 있었습니다.
+
+바로 Coordinator 부분인데요..
+
+하위 Coordinator를 종료하기 위해서는 상위 Coordinator에 접근해야만 하는 현상을 발견헀습니다.
+
+바로 아래 코드처럼요..
+
+```swift
+self.coordinator.parentCoordinator?.finish(childCoordinator: self.coordinator)
+```
+
+한눈에 봐도 굉장히 깔끔해보이지 않습니다. 😵
+
+**현재 코디네이터 ➡️ 상위 코디네이터**에 접근을 한 뒤 다시 **현재 코디네이터를 종료하는 메서드를 호출**하는 것은 굉장히 좋지 않은 접근이라고 생각했습니다.
+
+때문에 두 가지 방법을 고안해보았는데요.
+
+`delegate` 패턴을 사용하여 하위 코디네이터에서 직접적으로 상위 코디네이터에 접근하는 것을 방지
+
+```swift
+extension AppCoordinator: CoordinatorFinishDelegate {
+  func coordinatorDidFinish(childCoordinator: some Coordinator) {
+    self.finish(childCoordinator: childCoordinator)
+    
+    self.navigationController.viewControllers.removeAll()
+    
+    switch childCoordinator.self {
+    case is AuthCoordinator:
+      self.showTabBarFlow()
+    case is TabBarCoordinator:
+      self.showAuthFlow()
+    default:
+      break
+    }
+  }
+}
+```
+
+`override`를 활용하여 추가 로직 구현 방식으로 접근
+
+```swift
+override func finish(childCoordinator: some Coordinator) {
+  super.finish(childCoordinator: childCoordinator)
+  
+  self.navigationController.viewControllers.removeAll()
+  
+  switch childCoordinator.self {
+  case is AuthCoordinator:
+    self.showTabBarFlow()
+  case is TabBarCoordinator:
+    self.showAuthFlow()
+  default:
+    break
+  }
+}
+```
+
+사실 완벽하게 동일한 로직이지만 접근 방법의 차이를 갖고 있고, 어떤 방식이 더 나을까를 고민하던 중에
+
+`delegate` 패턴을 사용하는 방식이 “위임”한다는 로직 측면에서는 직관적이지만 코드 가시성 측면에서는 복잡하다는 의견으로 귀결되었습니다.
+
+`delegate` 패턴을 어떻게 하면 더 쉽게 사용할 수 있을까를 고민하던 중에 rx를 활용하면 되지 않을까라는 생각에 라이브러리를 찾아보게 되었고, RxFlow를 발견하게 되었습니다!
+
+# ❓ RxFlow란
+공식 GitHub 설명은 `RxFlow`를 다음과 같이 설명하고 있습니다.
+
+> RxFlow는 `Reactive Flow`를 활용하여 Coordinator 패턴을 구현한 iOS 앱을 위한 navigation 라이브러리이다.
+
+요약하면 “코디네이터 패턴에 `rx`를 접목시켰다.” 정도겠네요.
+
+`RxFlow`는 Coordinator 패턴을 Reactive화 시킨 것이기 때문에 Coordinator 패턴의 장단점을 먼저 설명하고 있습니다.
+
+## 😊 장점
+- `UIViewController`에서 네비게이션 코드를 분리한다.
+- `UIViewController`를 다른 화면 전환 상황에서도 재사용할 수 있다.
+- 의존성 주입을 쉽게 이룰 수 있다.
+
+## 😭 단점
+- 코디네이터 패턴의 기본적인 로직들은 앱을 bootstrap할 때마다 작성해주어야 한다.
+- 코디네이터 패턴 스택의 교류 과정에서 boilerplate 코드가 많이 발생할 수 있다.
+
+그렇다면 RxFlow는 어떤 발전을 이루었다고 주장하고 있을까요?
+
+- `Flows`를 활용하여 네비게이션을 좀 더 명확하게 발전시켰다.
+- `FlowCoordinator`를 기본적으로 제공하여 `Flows` 사이의 네비게이션을 제어할 수 있다.
+- 네비게이션 액션들이 Reactive하게 이루어진다.
+
+그리고 아래는 RxFlow를 이해하기 위해 알아두어야 할 6가지 용어들입니다.
+
+- `Flow`: 각각의 `Flow`는 앱의 **네비게이션 공간**들을 정의합니다. 이 공간은 네비게이션 **액션들이 선언되는 곳**입니다.
+- `Step`: `Step`은 네비게이션까지 이어질 수 있는 **state를 표현하기 위한 방법**입니다. **Flow와 Step을 조합**하면 가능한 **모든 네비게이션 액션을 설명**할 수 있습니다. `Step`은 (id나 URL 같은) 내부적인 값들을 지니고 있을 수도 있어 이 값들을 Flow에 선언되어 있는 화면들에 전달할 수도 있습니다.
+- `Stepper`: **Flow 안에서 Step을 발생**시킬 수 있다면, 그 어떤 것도 `Stepper`라고 불릴 수 있습니다.
+- `Presentable`: **Present 될 수 있는 어떤 것**을 추상적으로 표현한 개념입니다. (기본적으로 `UIViewController`와 `Flow`가 `Presentable`한 객체입니다.)
+- `FlowContributor`: 어떤 것들이 `Flow` 안에서 새로운 `Step`을 만들어낼 수 있을지를 `FlowCoordinator`에게 알려주는 간단한 데이터 구조입니다.
+- `FlowCoordinator`: 개발자가 적절한 `Flow`와 `Step`을 조합하여 가능한 네비게이션을 정의하면, `FlowCoordinator`는 앱의 모든 네비게이션을 제어하기 위해 이 조합들을 섞습니다. `FlowCoordinator`는 RxFlow에 의해 제공되어 개발자가 직접 구현하지 않아도 됩니다.
+
+## 사용 예시
+
+![](https://raw.githubusercontent.com/RxSwiftCommunity/RxFlow/develop/Resources/RxFlow.gif)
+
+공식 문서는 위와 같은 영화 정보앱을 예시로 들어 설명하고 있습니다.
+
+하나씩 살펴볼게요..! 😉
+
+## Step 정의
+
+우선 `Step`을 정의해주어야 합니다.
+
+한 가지 주의할 점은 `Step`은 앱의 상태를 나타내는 요소이기 때문에 어디로 navigation이 이루어질 지와 같은 **특정적인 요소들은 Step이 아니라 Flow**에서 정해줘야 한다고 합니다.
+
+예를 들어 `showMovieDetail(withID: Int)`는 영화를 선택했을 때 영화의 세부 정보를 보여주는 매우 특정된 케이스이기 때문에 바람직하지 않습니다.
+
+대신 `movieIsPicked(withID: Int)`와 같이 조금 더 **독립적인 케이스**를 추가해줘야 합니다. 이런 식으로 정의해주면 영화가 선택됐을 때 영화의 세부 정보 화면을 불러오는 것 말고도 다른 조건에서 다른 액션을 추가해줄 수 있습니다.
+
+아래와 같이 `enum` 타입으로 정의하는 것을 추천하고 있습니다.
+
+```swift
+enum DemoStep: Step {
+	// Login
+	case loginIsRequired
+	case userIsLoggedIn
+
+	// Onboarding
+	case onboardingIsRequired
+	case onboardingIsComplete
+
+	// Home
+	case dashboardIsRequired
+
+	// Movies
+	case moviesAreRequired
+	case movieIsPicked(withID: Int)
+	case castIsPicked(withID: Int)
+
+	// Settings
+	case settingsAreRequired
+	case settingsAreComplete
+}
+```
+
+## Flow 정의
+
+`Flow` 정의는 두 가지를 필수적으로 해줘야합니다.
+
+1. 네비게이션의 근간이 되는 root `Presentable`을 선언해줍니다.
+2. `navigate(to:)` 메서드를 구현함으로서 `Step`을 네비게이션 액션으로 변환해주는 기능을 구현합니다.
+
+`navigate(to:)` 메서드는 `FlowContributors`를 리턴합니다.
+
+`.one(flowContributor: .contribute(withNextPresentable: viewController, withNextStepper: viewController.viewModel))`
+의 형태로 리턴을 하면 되는데요.. 각 파라미터는 다음과 같습니다.
+
+- `viewController`: 모두가 아는바와 같이 `Presentable`이고, LifeCycle에 따라 연결된 `Stepper`(`ViewModel`)가 `Step`을 emit하는 것에 영향을 줍니다.
+  - 예를 들어 `Presentable`이 hidden(present되지 않은 상황)일 경우, `Stepper`가 `Step`을 emit한다고 해도 해당 emit은 효력이 없습니다.
+- `viewModel`: `Stepper`로서 연결된 `Presentable`의 LifeCycle에 영향을 받으며, `Step`을 emit함으로서 `Flow`안에서 네비게이션에 기여합니다.
+
+부가적으로 `Flow`는 View Controller를 instantiate 해줄 때 이루어지는 의존성 주입에 이용될 수도 있습니다.
+
+```swift
+class WatchedFlow: Flow {
+	var root: Presentable {
+		return self.rootViewController
+	}
+
+	private let rootViewController = UINavigationController()
+	private let services: AppServices
+
+	init(withServices services: AppServices) {
+		self.services = services
+	}
+
+	func navigate(to step: Step) -> FlowContributors {
+		guard let step = step as? DemoStep else { return .none }
+
+		switch step {
+		case .moviesAreRequired:
+			return self.navigateToMovieListScreen()
+		case .movieIsPicked(let movieID):
+			return self.navigateToMovieDetailScreen(with: movieID)
+		case .castIsPicked(let castID):
+			return self.navigateToCastDetailScreen(with: castID)
+		default:
+			return .none
+		}
+	}
+}
+
+private extension WatchedFlow {
+
+	func navigateToMovieListScreen() -> FlowContributors {
+		let viewController = WatchedViewController.instantiate(withViewModel: WatchedViewModel(), andServices: self.services)
+		viewController.title = "Watched"
+
+		self.rootViewController.pushViewController(viewController, animated: true)
+		return .one(flowContributor: .contribute(withNextPresentable: viewController, withNextStepper: viewController.viewModel))
+	}
+
+	func navigateToMovieDetailScreen(with movieID: Int) -> FlowContributors {
+		// ...
+	}
+
+	func navigateToCastDetailScreen(with castID: Int) -> FlowContributors {
+		// ...
+	}
+}
+```
+
+## Stepper 정의
+
+`Stepper`는 `protocol`이기 때문에 어떤 것이든 될 수 있다고 합니다. ViewController가 될 수도 있고, ViewModel이 될 수도 있죠.
+
+하지만 ViewModel 같이 로직을 분리할 수 있는 곳에 사용하는 것이 적절합니다.
+
+RxFlow는 `OneStepper`라는 `Stepper` 클래스를 기본으로 구현하여 제공하고 있습니다. 아래와 같이 생겼는데요..
+
+```swift
+public class OneStepper: Stepper {
+	public let steps = PublishRelay<Step>()
+	private let singleStep: Step
+
+	public init(withSingleStep singleStep: Step) {
+		self.singleStep = singleStep
+	}
+
+	public var initialStep: Step {
+		return self.singleStep
+	}
+}
+```
+
+이 `OneStepper`는 초기화와 동시에 오직 하나의 `Step`을 emit하는 것을 유일한 로직으로 갖는 `Stepper`입니다.
+
+새로운 `Flow`를 생성하고 첫 `Step`을 실행할 때 유용하다고 합니다.
+
+아래 `Stepper`는 `pick(movieID:)` 메서드가 실행될 때마다 `DemoStep.movieIsPicked(withID)`를 emit합니다.
+
+해당 `Step`이 emit되면, 위의 `WatchedFlow`에서 `navigate(to step:)` 메서드가 실행되고, 결과적으로 `navigateToMovieDetailScreen(withmovieID: Int)` 메서드가 실행되게 됩니다.
+
+```swift
+class WatchedViewModel: Stepper {
+	let movies: [MovieViewModel]
+	let steps = PublishRelay<Step>()
+
+	init(with service: MovieService) {
+		self.movies = service.watchedMovies().map({ movie -> MovieViewModel in
+			return MovieViewModel(id: movie.id, title: movie.title, image: movie.image)
+		})
+	}
+
+	// 영화가 pick 됐을 때 새로운 Step을 emit합니다.
+	// 이 emit은 WatchedFlow에서 네비게이션 액션을 촉발합니다.
+	public func pick(movieID: Int) {
+		self.steps.accept(DemoStep.movieIsPicked(withID: movieID))
+	}
+}
+```

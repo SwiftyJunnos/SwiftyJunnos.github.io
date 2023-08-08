@@ -1,0 +1,172 @@
+---
+title: '📱 iOS - CompositionalLayout.02'
+date: '2023-01-30'
+tags: ['Swift', 'iOS']
+draft: false
+summary: 'Compositional = iOS 삶의 질 향상'
+---
+
+# Supplementary Item
+
+CollectionView를 사용하다보면 자주 사용하게 되는 요소들이 있습니다.
+
+Badges, Headers, Footers라고 불리는 이것들은 리스트의 앞이나 뒤에 붙어 전체적인 리스트에 대한 정보를 제공해줍니다.
+
+## Badges
+
+`CompositionalLayout`에서는 이런 SupplementaryItem들을 사용하기 더욱 쉽게 Anchor 개념을 도입했습니다.
+
+![](https://i.imgur.com/IvAOVeC.png)
+
+SupplementaryItem과 CollectionView의 시각적인 관계로서 이들의 위치를 정해준다는 개념입니다.
+
+개념 자체도 굉장히 쉽죠?
+
+적용도 동일하게 매우 쉽게 구현되었습니다.
+
+```swift
+let badgeAnchor = NSCollectionLayoutAnchor(
+	edges: [.top, .trailing],
+	fractionalOffset: CGPoint(x: 0.3, y: -0.3)
+)
+let badgeSize = NSCollectionLayoutSize(
+	widthDimension: .absolute(20),
+	heightDimension: .absolute(20)
+)
+let badge = NSCollectionLayoutSupplementaryItem(
+	layoutSize: badgeSize,
+	elementKind: "badge",
+	containerAnchor: badgeAnchor
+)
+let item = NSCollectionLayoutItem(
+	layoutSize: itemSize,
+	supplementaryItems: [badge]
+)
+```
+
+여기서 적용된 `badge`라는 `Item`은 우측 상단에 위치하고 20x20의 사이즈를 갖는다는 것을 쉽게 알 수 있죠.
+
+## Header & Footer
+
+Header와 Footer는 Badges와는 다른 점이 있습니다.
+
+Badges는 `Item`의 특정 위치에 겹쳐보이는 요소지만, Header와 Footer는 `Item`을 밀어내고 공간을 차지하면서 위치하는 요소라는 점입니다.
+
+따라서 Header와 Footer는 `Boundary`라는 추가적인 기능을 갖고 있습니다.
+
+```swift
+let header = NSCollectionLayoutBoundarySupplementaryItem(
+	contentSize: headerSize,
+	elementKind: "header",
+	alignment: .top
+)
+let footer = NSCollectionLayoutBoundarySupplementaryItem(
+	layoutSize: footerSize,
+	elementKind: "footer",
+	alignment: .bottom
+)
+
+header.pinToVisibleBounds = true
+section.boundarySupplementaryItems = [header, footer]
+```
+
+`pinToVisibleBounds` 프로퍼티를 사용해 흔히 말하는 Sticky Header 또한 만들기 쉬워졌습니다.
+
+## DecorationView
+
+`ScrollView`들의 배경을 꾸며주는 `DecorationView` 또한 아래처럼 사용할 수 있습니다.
+
+```swift
+let background = NSCollectionLayoutDecorationItem.backgorund(elementKind: "background")
+section.backgroundItems = [background]
+
+layout.register(
+	MyCoolDecorationView.self,
+	forDecorationViewOfKind: "background"
+)
+```
+
+## Estimated Self-Sizing
+
+`Item`들의 요소들의 크기가 정해지지 않고 변화하는 경우가 있습니다.
+
+컨텐츠가 있거나 없는 경우가 있을수도 있고, OS의 텍스트 크기를 변경함에 따라 `size`에 변화가 생길수도 있죠.
+
+`size`를 설정해줄 때 `.estimated`을 활용하면 이에 대해 유연한 대응이 가능해집니다.
+
+```swift
+let headerSize = NSCollectionLayoutSize(
+	widthDimension: .fractionalWidth(1.0),
+	heightDimension: .estimated(44.0)
+)
+let header = NSCollectionLayoutBoundarySupplementaryitem(
+	layoutSize: headerSize,
+	elementKind: "header",
+	alignment: .top
+)
+header.pinToVisibleBounds = true
+section.boundarySupplementaryItems = [header, footer]
+```
+
+위 예시의 경우 `Item`의 높이를 컨텐츠의 크기 변화에 대응시킬 수 있는 것이죠.
+
+## Group 안에 Group 넣기
+
+CollectionView가 복잡해지면서 `Group` 안에 다른 `Group`을 넣을 일이 생길 수도 있겠죠.
+
+사실 `NSCollectionLayoutGroup`은 `NSCollectionLayoutItem`을 상속받은 하위타입입니다.
+
+다른 말로, `Group`을 모아서 다른 `Group`을 만들수도 있다는 의미죠.
+
+이런 Nesting에는 제한이 없기 때문에 상당히 다양한 형태의 디자인들을 만들 수 있게 되었습니다.
+
+![](https://i.imgur.com/ZHvtvEJ.png)
+
+이런 형태를 만드려면 어떻게 만들면 될까요?
+
+```swift
+let leadingItem = NSCollectionLayoutItem(
+	layoutSize: leadingItemSize
+)
+let trailingItem = NSCollectionLayoutItem(
+	layoutSize: trailingItemSize
+)
+let trailingGroup = NSCollectionLayoutGroup.vertical(
+	layoutSize: trailingGroupSize,
+	subitem: trailingItem,
+	count: 2
+)
+let containerGroup = NSCollectionLayoutGroup.horizontal(
+	layoutSize: containerGroupSize,
+	subitems: [leadingItem, trailingGroup]
+)
+```
+
+사실 굉장히 직관적으로 구성할 수 있습니다.
+
+`leadingItem`과 `trailingItem` 둘이 묶인 `trailingGroup`을 `containerGroup`으로 묶은 형태입니다.
+
+## CollectionView를 CollectionView에 넣기
+
+`CollectionView` 안에 또 다른 `CollectionView`가 있을 경우, 스크롤하는 방향이 바뀌기 때문에 부자연스러운 동작을 보일 수 있습니다.
+
+이런 경우를 해결하기 위해서는
+
+```swift
+section.orthogonalScrollingBehavior = .continuous
+```
+
+이 한 줄의 코드를 추가해주면 해결됩니다.
+
+```swift
+enum UICollectionLayoutSectionOrthogonalScrollingBehavior: Int {
+	case none
+	case continuous
+	case continuousGroupLeadingBoundary
+	case paging
+	case groupPaging
+	case groupPagingCentered
+}
+```
+
+이렇게 두개의 `continuous` 옵션과 3개의 paging 옵션이 있으니 원하는 값을 찾아 넣어봅시다.

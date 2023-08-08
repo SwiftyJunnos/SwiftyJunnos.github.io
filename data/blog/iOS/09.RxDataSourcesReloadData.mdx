@@ -1,0 +1,315 @@
+---
+title: '📱 iOS - RxDataSources와 reloadData'
+date: '2023-05-06'
+tags: ['Swift', 'iOS']
+draft: false
+summary: 'RxDataSources를 사용할 때의 `reloadData` 문제'
+---
+
+# 😵 DataSource를 reload 하는 과정에서 문제 발생
+
+![](https://i.imgur.com/qXjX4Zk.gif)
+
+MyPage를 편집하는 View를 구현하던 중 하나의 Section 값이 업데이트 되면 다른 Section의 값이 초기값으로 돌아가는 현상을 마주했습니다.
+
+해당 View는 하나의 `UICollectionView`로 구성되었으며 최상단의 프로필/배경 이미지 변경 부분은 Header, 이름/ID/취향 부분은 Section으로 구성되어 있습니다.
+
+```swift
+  private lazy var dataSource: EditMyPageDataSource = EditMyPageDataSource(
+    configureCell: { [weak self] _, collectionView, indexPath, item in
+      switch item {
+      case let .name(name, placeholder):
+        let cell = collectionView.dequeueReusableCell(for: indexPath) as FavorTextFieldCell
+        cell.bind(placeholder: placeholder)
+        cell.bind(text: name)
+        return cell
+      case let .id(name, placeholder):
+        let cell = collectionView.dequeueReusableCell(for: indexPath) as FavorTextFieldCell
+        cell.bind(placeholder: placeholder)
+        cell.bind(text: name)
+        return cell
+      case let .favor(isSelected, favor):
+        let cell = collectionView.dequeueReusableCell(for: indexPath) as EditMyPagePreferenceCell
+        cell.isButtonSelected = isSelected
+        cell.favor = favor
+        return cell
+      }
+    }, configureSupplementaryView: { dataSource, collectionView, kind, indexPath in
+      switch kind {
+      case EditMyPageCollectionHeaderView.reuseIdentifier:
+        let header = collectionView.dequeueReusableSupplementaryView(
+          ofKind: kind,
+          for: indexPath
+        ) as EditMyPageCollectionHeaderView
+        return header
+      case UICollectionView.elementKindSectionHeader:
+        let header = collectionView.dequeueReusableSupplementaryView(
+          ofKind: kind,
+          for: indexPath
+        ) as FavorSectionHeaderView
+        let headerTitle = dataSource[indexPath.section].header
+        header.updateTitle(headerTitle)
+        return header
+      case UICollectionView.elementKindSectionFooter:
+        let footer = collectionView.dequeueReusableSupplementaryView(
+          ofKind: kind,
+          for: indexPath
+        ) as FavorSectionFooterView
+        footer.footerDescription = dataSource[indexPath.section].footer
+        return footer
+      default:
+        return UICollectionReusableView()
+      }
+    }
+  )
+```
+
+DataSource를 바인딩하는 과정은 Rx와의 호환성을 고려하여 **RxDataSources** 라이브러리를 사용하고 있습니다.
+추가적으로 cell을 dequeue하고 identifier를 정의하는 과정을 편리하게 구현하기 위해 **Reusable** 라이브러리를 사용하고 있습니다.
+
+# ❓ 원인 파악
+
+각 Cell에 rx를 사용하여 데이터를 바인딩하는 과정에서의 문제, Reactor의 `transform`에서 `newState`가 새롭게 생성되는 문제 등을 고려했지만 결국에는 모두 아니였습니다.
+
+원인은 `dataSource`에 `print`문을 넣은 후에 발견할 수 있었습니다.
+
+```swift
+  private lazy var dataSource: EditMyPageDataSource = EditMyPageDataSource(
+    configureCell: { [weak self] _, collectionView, indexPath, item in
+      switch item {
+      case let .name(name, placeholder):
+        let cell = collectionView.dequeueReusableCell(for: indexPath) as FavorTextFieldCell
+        cell.bind(placeholder: placeholder)
+        cell.bind(text: name)
+        print(cell) // 🖐️ 여기
+        return cell
+      case let .id(name, placeholder):
+        let cell = collectionView.dequeueReusableCell(for: indexPath) as FavorTextFieldCell
+        cell.bind(placeholder: placeholder)
+        cell.bind(text: name)
+        print(cell) // 🖐️ 여기
+        return cell
+      case let .favor(isSelected, favor):
+        let cell = collectionView.dequeueReusableCell(for: indexPath) as EditMyPagePreferenceCell
+        cell.isButtonSelected = isSelected
+        cell.favor = favor
+        return cell
+      }
+```
+
+![](https://i.imgur.com/G41uFul.png)
+
+각 Section에 하나의 Item만 포함되어 있으므로 취향 Section이 변경될때마다 모든 Section의 `dataSource`가 다시 정의되고 있었던 것입니다.
+
+모든 Section의 데이터가 reload되고 있다는 의심을 품고 RxDataSources 내부 코드를 파악해보기로 했습니다.
+
+# ❗ 원인 발견
+
+문제는 RxDataSources가 맞았습니다.
+
+일단 저희가 사용하고 있던 `RxCollectionViewSectionedReloadDataSource`의 경우는 다음과 같이 구성되어 있습니다.
+
+```swift
+open class RxCollectionViewSectionedReloadDataSource<Section: SectionModelType>
+    : CollectionViewSectionedDataSource<Section>
+    , RxCollectionViewDataSourceType {
+    public typealias Element = [Section]
+
+    open func collectionView(_ collectionView: UICollectionView, observedEvent: Event<Element>) {
+        Binder(self) { dataSource, element in
+            #if DEBUG
+                dataSource._dataSourceBound = true
+            #endif
+            dataSource.setSections(element)
+            collectionView.reloadData() // 👈 여기!
+                    collectionView.collectionViewLayout.invalidateLayout()
+        }.on(observedEvent)
+    }
+}
+```
+
+UIKit은 `UICollectionView`의 값을 reload하는 방법으로 크게
+
+1. 모든 값을 reload하는 `reloadData()`
+2. 특정 Section만을 reload하는 `reloadSections()`
+3. 마지막으로 특정 Item만을 reload하는 `reloadItem(at:)`
+
+의 세가지 종류 API를 제공하고 있습니다.
+하지만 RxDataSources의 경우, 무조건 `reloadData()`를 호출하여 모든 값을 reload하고 있는 점을 볼 수 있습니다.
+
+ChatGPT에게 물어보니 RxDataSources는 규모가 작은 데이터를 다룰 때 사용되는 것을 고려하여 설계되었고, 모든 값을 reload하는 것이 다른 trade-off와 비교했을 때 효율적으로 판단했다고 합니다.
+
+![](https://i.imgur.com/eIPDjzg.png)
+
+정확한 정보인지 개인적으로 출처를 찾아보려 했지만 찾아볼 수는 없었습니다..
+
+제보 받습니다.. 😅
+
+`.name`과 `.id` 섹션의 경우에는 View가 로드됐을 때 단 한 번만 데이터가 로드되기 때문에 모든 Section이 reload되는 경우 초기값으로 돌아가는 것입니다.
+
+혹시나 `RxCollectionViewSectionedAnimatedDataSource`는 변경되는 Section을 골라내서 부분적으로 reload가 되나 싶었지만..
+마찬가지로 애니메이션 처리만 부분적으로 처리되고 reload는 전체적으로 되고 있었습니다..
+
+# ‼️ 해결
+
+이를 해결하기 위해서는 두 가지 해결법이 있습니다.
+
+1. Custom DataSource 타입을 만들어 사용한다.
+2. RxDataSources를 사용하지 않는다.
+
+## Custom DataSource 사용
+
+```swift
+class FavorDataSource<Section: SectionModelType>: RxCollectionViewSectionedReloadDataSource<Section> {
+  override func collectionView(_ collectionView: UICollectionView, observedEvent: Event<[Section]>) {
+    Binder(self) { dataSource, element in
+      dataSource.setSections(element)
+      collectionView.reloadSections([2], animationStyle: .none) // 👈 테스트를 위해 고정적으로 2번째 섹션만 reload되도록
+      collectionView.collectionViewLayout.invalidateLayout()
+    }.on(observedEvent)
+  }
+}
+```
+
+첫 번째 방법입니다.
+
+위와 같이 Custom DataSource를 만들어 사용하는 방법입니다.
+
+`reloadData()` 대신 `reloadSections`나 `reloadItem(at:)`을 사용하는 DataSource를 따로 만들어 사용하는 방법입니다.
+
+테스트를 위해 우선 2번째 Section의 값들만 reload 되도록 구현해보았습니다.
+
+![](https://i.imgur.com/q4pR5DY.gif)
+
+Section이 깜빡이긴 하지만 일단 원하는대로 동작은 하는군요..
+
+단점은 Section의 형태에 따라 DataSource를 View에 맞게 각각 만들어서 사용해야 할 가능성이 있다는 점이였습니다.
+
+“언제 어떤 Section을 reload해야하는가?”를 Generic하게 계산해주어야 한다는 점은 일반적인 경우에서도 꽤나 복잡한 로직을 필요로 하고, 추후 과정에서 스파게티 코드가 될 것이라는 생각이 들어 부적절하다고 판단하였습니다.
+
+## RxDataSources 대신 DiffableDataSources 사용
+
+사실 가장 좋은 방법은 Native 기능을 사용하는 것이겠죠?
+
+저는 DiffableDataSources에 대한 충분한 공부를 한 뒤 저희 프로젝트의 RxData Source를 DiffableDataSources로 대체해도 문제가 없겠다는 판단을 하고 RxDataSources를 걷어내기로 결정하였습니다.
+
+Rx를 사용하면서도 DiffableDataSources를 사용하는 데에는 아무 문제가 없을 것 같더라고요..
+
+> `bind(to:)`를 사용하여 간편하게 데이터를 바인딩할 수 있다라는 장점만 포기한다면 RxDataSources를 걷어내는 데에는 아무 문제가 없었습니다.
+
+심지어 API를 사용하는 형태도 상당히 유사해서 러닝 허들도 낮은 편에 속했습니다.
+
+하지만 제 상황에서의 DiffableDataSources를 사용하는 가장 큰 이점은 제가 **원하는 시점에 제가 원하는 Section이나 Item만을 업데이트** 해줄 수 있다는 점이였습니다.
+
+자 이제 리팩토링을 해봅시다..! 🔥
+
+### 1. Section 정의
+
+우선 두 가지 프로토콜을 정의해주었습니다.
+
+```swift
+public protocol SectionModelType: Hashable { }
+public protocol SectionModelItem: Hashable { }
+```
+
+SectionIdentifier로 사용될 `SectionModelType`과 ItemIdentifier로 사용될 `SectionModelItem` 프로토콜입니다.
+
+이 두가지 프로토콜은 아무 기능도 하지 않고 오직 `Hashable`을 채택해주기만 했습니다. (DiffableDataSources에서 사용되려면 Hashable해야합니다!)
+
+추후에 필요하다면 기능을 추가해주겠지만 아직은 Generic에서의 타입 제한 용도로만 사용하고 있습니다.
+
+```swift
+enum ProfileSectionItem: SectionModelItem {
+  case profileSetupHelper(ProfileSetupHelperCellReactor)
+  case preferences(ProfilePreferenceCellReactor)
+  case anniversaries(ProfileAnniversaryCellReactor)
+  case memo
+  case friends(ProfileFriendCellReactor)
+}
+
+enum ProfileSection: SectionModelType {
+  case profileSetupHelper
+  case preferences
+  case anniversaries
+  case memo
+  case friends
+}
+```
+
+그리고 그 두가지 프로토콜을 채택한 예시입니다.
+
+`SectionModelType`을 채택한 Section들과 `SectionModelItem`을 채택한 Item을 정의해줍니다.
+
+### 2. Reactor State 변경
+
+```swift
+var sections: [ProfileSection] = []
+var items: [[ProfileSectionItem]] = []
+
+var profileSetupHelperItems: [ProfileSectionItem] = []
+var preferencesItems: [ProfileSectionItem] = []
+var anniversaryItems: [ProfileSectionItem] = []
+var friendItems: [ProfileSectionItem] = []
+```
+
+저는 각 Section에 대응되는 Item들을 따로 관리해주고 있습니다.
+
+이렇게 하는 편이 데이터들을 수정해주는 로직을 짤 떄 편하더라구요..
+
+```swift
+func transform(state: Observable<State>) -> Observable<State> {
+  return state.map { state in
+    var newState = state
+    var newSections: [ProfileSection] = []
+    var newItems: [[ProfileSectionItem]] = []
+    var profileSetupHelperItems: [ProfileSectionItem] = []
+
+    // 취향
+    if !state.preferencesItems.isEmpty {
+	  newSections.append(.preferences)
+	  newItems.append(state.preferencesItems)
+    } else {
+    profileSetupHelperItems.append(.profileSetupHelper(ProfileSetupHelperCellReactor(.preference)))
+    }
+    // 기념일
+    if !state.anniversaryItems.isEmpty {
+	  newSections.append(.anniversaries)
+	  newItems.append(state.anniversaryItems)
+    } else {
+    profileSetupHelperItems.append(.profileSetupHelper(ProfileSetupHelperCellReactor(.anniversary)))
+    }
+    // 친구
+    newSections.append(.friends)
+    newItems.append(state.friendItems)
+    // 새 프로필
+    if !profileSetupHelperItems.isEmpty {
+	  newSections.insert(.profileSetupHelper, at: .zero)
+	  newItems.insert(profileSetupHelperItems, at: .zero)
+    }
+  
+    newState.sections = newSections
+    newState.items = newItems
+    return newState
+  }
+}
+```
+
+각 Item들에 대한 데이터들은 `transform(state:)`에서 통합해주는 방식으로 처리해주고 있습니다.
+
+### 3. DataSource에 바인딩
+
+```swift
+reactor.state.map { (sections: $0.sections, items: $0.items) }
+  .asDriver(onErrorRecover: { _ in return .empty()})
+  .drive(with: self, onNext: { owner, sectionData in
+	var snapshot: NSDiffableDataSourceSnapshot<ProfileSection, ProfileSectionItem> = .init()
+	snapshot.appendSections(sectionData.sections)
+	sectionData.items.enumerated().forEach { idx, items in
+	  snapshot.appendItems(items, toSection: sectionData.sections[idx])
+	}
+	owner.dataSource.apply(snapshot, animatingDifferences: false)
+  })
+  .disposed(by: self.disposeBag)
+```
+
+sections와 items 모두 Hashable하기 때문에 위와 같이 `appendSections`, `appendItems` 등의 DiffableDataSources의 API를 사용하여 `dataSource`에 바인딩해주면 끝입니다!

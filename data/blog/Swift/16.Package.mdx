@@ -1,0 +1,247 @@
+---
+title: '🍎 Swift - Package'
+date: '2023-03-09'
+tags: ['Swift']
+draft: false
+summary: '내 코드를 별도 포장'
+---
+
+# Package (패키지)
+
+![](https://i.imgur.com/wiNIbnk.png)
+
+패키지란 프로젝트 내에서 사용하는 코드/리소스들을 재사용하기 쉽도록 묶어 정돈하거나 다른 개발자나 커뮤니티와 공유하기 위한 기능입니다.
+
+Xcode는 이런 패키지 기능을 Swift Package Manager를 통해 쉽고 간편하게 사용할 수 있도록 지원하고 있습니다.
+
+네 맞아요..
+
+저희가 맨날 쓰던 그거요..
+
+그러면 멋있고 화려한 RxSwift와 같은 라이브러리를 만들기 위해 시작해보죠?
+
+## Swift Package 만들기
+
+![](https://docs-assets.developer.apple.com/published/ce439cc5d6ba4621ef3eb70fe9168526/creating-a-swift-package-with-xcode-1@2x.png)
+
+### 전반적인 패키지 생성 과정
+
+![](https://i.imgur.com/adw5bti.png)
+
+패키지 만들기 정말 쉽습니다.
+
+Xcode의 메뉴에서 `File ➡️ New ➡️ Package` 를 눌러줍시다.
+
+![](https://i.imgur.com/fxGMBSw.png)
+
+그러면 이렇게 프로젝트나 파일을 만드는 것과 같이 패키지를 생성하는 창이 보입니다.
+
+저는 Favor 프로젝트에 패키지를 적용하기 위해 Add to와 Group도 설정해주었습니다.
+
+그러면 비어있는 패키지 만들기 끝입니다.
+
+![](https://i.imgur.com/ZcS8ZSl.png)
+
+패키지를 생성하면 이런 구조의 파일들이 프로젝트에 추가됩니다. 각각을 한 번 알아볼까요?
+
+- README.md
+
+뭐 설명할 것도 없죠. 패키지에 대한 설명을 넣어주면 됩니다.
+
+- Package.swift
+
+흔히들 manifest라고 부르는 패키지에 대한 정보가 담긴 파일입니다. 이 파일 안에서 패키지의 name, products, targets, dependencies들을 설정해주게 됩니다.
+
+- Sources
+
+소스 파일들은 이 Sources 디렉토리 내부에 위치합니다. 그리고 Target이라는 하나의 이름 안에 관리됩니다.
+
+- Tests
+
+패키지에 대한 Unit Test 코드들이 여기에 해당됩니다.
+
+### Package.swift 작성
+
+Favor 프로젝트는 세가지 패키지를 만들어 사용하기로 했습니다.
+
+- FavorCoreKit
+
+`Foundation`의 `extension`들, OS와 밀접하게 닿아있는 기능들 (`PhotosUI`, `CoreGraphics` 등)을 담아둡니다.
+보통 `BaseViewController`와 같은 `Base` 파일들도 여기에 담긴다고 하는데 아직 저희 프로젝트는 이런 파일들이 많지 않아서 (`BaseVC` 하나) 추가적인 회의를 통해 결정하기로 했습니다.
+
+- FavorUIKit
+
+`UIKit`의 `extension`들과 커스텀 UI 컴포넌트들, 폰트와 아이콘 같은 Resources들과 UI에 사용되는 상수 파일들이 포합됩니다.
+
+- FavorNetworkKit
+
+HTTP 통신과 같은 네트워크 작업에 필요한 파일들이 모두 포함됩니다. 저희 프로젝트는 `Moya`를 사용하기 때문에 `BaseTargetType`과 `API` 파일들을 여기에 넣어주었습니다.
+
+이 중에서 FavorUIKit을 한 번 살펴보겠습니다.
+
+```swift
+// swift-tools-version: 5.7
+// The swift-tools-version declares the minimum version of Swift required to build this package.
+
+import PackageDescription
+
+let package = Package(
+  name: "FavorUIKit",
+  platforms: [
+    .iOS(.v15)
+  ],
+  products: [
+    // Products define the executables and libraries a package produces, and make them visible to other packages.
+    .library(
+      name: "FavorUIKit",
+      targets: ["FavorUIKit"]),
+  ],
+  dependencies: [
+    // Dependencies declare other packages that this package depends on.
+    // .package(url: /* package url */, from: "1.0.0"),
+    .package(url: "https://github.com/ReactiveX/RxSwift.git", .upToNextMajor(from: "6.5.0")),
+    .package(url: "https://github.com/SnapKit/SnapKit.git", .upToNextMajor(from: "5.6.0")),
+    .package(path: "../FavorCoreKit")
+  ],
+  targets: [
+    // Targets are the basic building blocks of a package. A target can define a module or a test suite.
+    // Targets can depend on other targets in this package, and on products in packages this package depends on.
+    .target(
+      name: "FavorUIKit",
+      dependencies: [
+        "RxSwift",
+        .product(name: "RxCocoa", package: "RxSwift"),
+        "SnapKit",
+        "FavorCoreKit"
+      ],
+      resources: [
+        .process("Resources")
+      ]
+    ),
+    .testTarget(
+      name: "FavorUIKitTests",
+      dependencies: ["FavorUIKit"]),
+  ]
+)
+```
+
+- **name**
+
+`name`은 말 그대로 패키지의 이름입니다.
+
+- **platforms**
+
+`platforms`는 패키지가 사용될 수 있는 플랫폼을 명시해둡니다. `.iOS`, `.macOS`와 같은 플랫폼 `case`와 `.v15`와 같은 버전 `case`를 넣어 적용할 수 있습니다.
+
+- **products**
+
+`products`는 패키지가 제공하는 프로덕츠들을 명시하는 곳입니다. `.library` 외에도 `.executable`, `.plugin`과 같은 `case`도 있습니다.
+
+하나의 라이브러리에 여러개의 targets를 만들 수도 있습니다. 대표적으로 RxSwift의 경우 RxSwift 하나의 라이브러리에 RxRelay, RxCocoa 등의 여러 타겟들을 제공하고 있죠.
+
+- **dependencies**
+
+패키지가 사용하는 다른 패키지들을 명시합니다. 여기에 적힐 내용은 보통 라이브러리 리드미 파일에 적어두는 경우가 많으니 참고하여 적어주면 됩니다.
+
+깃허브에 올라와있는 패키지의 경우 `.package(url:)`을 사용해주면 되고, 로컬 패키지의 경우 `.package(path:)`를 사용해줍니다.
+
+뒤에 붙는 버전의 경우
+
+  - from
+
+    해당 버전 이상부터 사용합니다.
+
+  - uptoNextMajor
+
+    메이저 버전이 바뀌기 전까지 업데이트하며 사용합니다.
+
+    ex) `5.0.0` ~ `6.0.0`
+
+  - uptoNextMinor
+    마이너 버전이 바뀌기 전까지 업데이트하며 사용합니다.
+    ex) `5.0.0` ~ `5.1.0`
+
+  - exact
+    해당 버전으로 고정하여 사용합니다.
+
+- **targets**
+
+패키지에 사용된 타겟들을 각각 명시합니다.
+
+`dependencies`에는 보통 위의 dependencies에 적힌 패키지들이 적히고, 하나의 패키지에 타겟이 여러개인 경우 `.product(name: "RxCocoa", package: "RxSwift")`와 같이 각각 적어줍니다.
+
+`resources`에는 타겟에서 사용되는 리소스 파일들을 명시합니다.
+
+![](http://tech.kakao.com/wp-content/uploads/2022/05/11_swiftpm.png)
+
+단 `.xcassets`, `.storyboard`, `.xib`, `.nib` 파일등과 같은 리소스 파일들은 Xcode가 그 사용처가 분명하다고 판단하여 자동으로 패키징이 이루어집니다.
+
+![](http://tech.kakao.com/wp-content/uploads/2022/05/12_swiftpm.png)
+
+하지만 저희 프로젝트의 경우 폰트와 같은 자동으로 패키징되지 않는 타입의 리소스가 있기 떄문에 `.process("Resources")`와 같이 명시해주었습니다.
+
+리소스 명시는 두가지 방법을 지원합니다.
+
+- **process**
+
+해당 디렉토리에 있는 모든 리소스를 하나의 depth로 평준화합니다.
+
+플랫폼에 따라 Xcode가 최적화를 진행할 수 있다면 최적화를 진행해서 리소스 번들의 최상위 디렉토리에 복사합니다.
+
+- **copy**
+
+디렉토리 구조 그대로 복사하여 사용합니다.
+
+디렉토리 구조를 굳이 유지해야하는게 아니라면 최적화도 진행되는 `process`가 사용된다고 합니다.
+
+## 접근 제어자
+
+패키지화를 한 이상 접근제어자에 더욱 신경을 써주어야 합니다.
+
+Swift에는 다섯가지 접근 제어자가 있습니다.
+
+- **open, public**
+
+프로젝트 내의 모든 곳에서 접근할 수 있습니다.
+
+`open`과 `public`의 차이가 패키징을 사용하면서 중요해집니다.
+
+`open`을 사용하면 다른 모듈에서 `overclass`를 허용합니다. 하지만 `public`은 이를 허용하지 않습니다.
+
+따라서 `BaseViewController`와 같이 상속이 필요한 클래스의 경우 `open`으로 접근을 열어주어야 합니다.
+
+- **internal**
+
+아무 접근제어자도 작성하지 않으면 기본적으로 적용되는 접근제어자입니다. 작성된 모듈 안에서만 접근 가능합니다.
+
+- **fileprivate**
+
+작성된 소스 파일 내부에서만 접근 가능합니다.
+
+- **private**
+
+가장 제한적인 접근제어자입니다. 작성된 객체 내부에서만 접근 가능합니다.
+
+## 패키지 적용하기
+
+![](https://i.imgur.com/LYKKSNC.png)
+
+프로젝트의 앱 타겟에서 라이브러리 추가를 눌러줍니다.
+
+![](https://i.imgur.com/gLI60WK.png)
+
+Workspace 내부에 만들어두었기 때문에 패키지를 바로 선택할 수 있습니다.
+
+![](https://i.imgur.com/CBHCtA8.png)
+
+`import`까지 해보면서 정상적으로 추가되었는지 확인해봅시다!
+
+> References
+
+[Apple - Creating a standalone Swift package with Xcode](https://developer.apple.com/documentation/xcode/creating-a-standalone-swift-package-with-xcode)
+
+[Apple - Bundling resources with a Swift package](https://developer.apple.com/documentation/xcode/bundling-resources-with-a-swift-package)
+
+[KakaoTech - Swift Package Manager 적용기](https://tech.kakao.com/2022/06/02/swift-package-manager/)
+
+[ZeddiOS - Copy와 Process의 차이점](https://zeddios.tistory.com/1259)
