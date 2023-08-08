@@ -1,0 +1,206 @@
+---
+title: '🍎 Swift - Bounds vs Frame'
+date: '2022-09-22'
+tags: ['Swift']
+draft: false
+summary: 'View의 크기와 몸집'
+---
+
+오늘은 `frame`과 `bounds`의 실체와 차이점에 대해 공부해볼거에요.
+두 친구 모두 코드 상에서 `UIView`에 변경을 가할 때 자주 보게 되는 용어들이죠.
+근데 지금까지는 그냥 둘 다 써보고 제가 원하던 프로퍼티가 있으면 사용하곤 했습니다.
+`view.bounds.width = 32.0`와 같은 작업들이요.
+
+그래서 두 가지를 공식 문서에서 찾아보았습니다.
+
+![frame](https://i.imgur.com/PKxVM3U.png)
+![bounds](https://i.imgur.com/rCHISlC.png)
+
+우선 눈에 띄는 점은 두 가지 모두 `CGRect`라는 타입으로 정의되어 있다는 점입니다.
+`CGRect` 이 친구도 뭔가 아무 생각없이 사용했었는데 제대로 알아본 적은 없네요.
+그래서 먼저 `CGRect`에 대해서 알아보겠습니다.
+
+# CGRect
+
+일단 반복된 사용으로 인해서 이 아이가 대충 View의 영역을 표현한다는 점은 알고 있습니다. 제공되는 생성자들을 보면
+
+- `init(origin: CGPoint, size: CGSize)`
+- `init(x: Double, y: Double, width: Double, height: Double)`
+- `init(x: Int, y: Int, Width: Int, height: Int)`
+- `init(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat)`
+이런 식으로 좌표값과 넓이, 높이를 받고 있거든요.
+
+그리고 이제 애플의 설명을 봅시다.
+
+![CGRect](https://i.imgur.com/jYjkyvc.png)
+
+> A structure that contains the location and dimensions of a rectangle.
+
+우선 `CGRect`는 다른 기본 타입들과 마찬가지로 구조체인 것을 확인할 수 있습니다. 그리고 **사각형의 위치와 크기 정보**를 지니는 구조체라고 하네요!
+
+어느정도 감으로 알던 거의 그대로네요. 그리고 Rect는 사각형을 표현하는 작명이였습니다.
+
+그러면 이제 다 알아냈어요. `CGRect`는 어떤 한 **기준점(origin)** 과 **크기(size)** 를 갖고 사각형을 표현하는 구조체인 것이죠.
+
+가장 첫 번째 생성자를 보면 `CGPoint` 타입의 기준점과 `CGSize` 타입의 크기를 지정해주는 것을 볼 수 있습니다.
+
+이 두 가지에 대해서도 간략하게 살펴보면,
+
+- `CGPoint`: **좌표**를 나타내는 타입
+  - ex: (1, 2)
+- CGSize: **크기**를 나타내는 타입
+  - ex: 15(width) * 4(height)
+
+![CGSize&CGRect](https://i.imgur.com/o8l8cZ1.png)
+
+사각형은 도형이기 때문에 그림으로 볼 때 가장 이해가 빠르겠죠?
+위 사진과 같이 기준점(origin)과 그 기준점을 기준으로 사각형을 그릴 크기(size) 값을 갖는 것이 바로 `CGRect`인 것입니다.
+쉽게 말하면 `CGRect`는 “어디에 어떤 크기로 UI 요소를 그리겠다.”를 사각형 영역으로 지정해 줄 때 사용하는 구조체입니다.
+
+한 가지만 유의하면 될 것 같습니다.
+`width`는 기준점을 기준으로 오른쪽이 positive, `height`는 기준점을 기준으로 아래쪽이 positive입니다.
+
+# frame, bounds
+
+이제 다시 돌아가서 `frame`과 `bounds`에 대해서 알아보겠습니다.
+각각의 설명을 한 번 볼까요?
+
+> frame:
+>
+> The frame rectangle, which describes the view’s location and size in its superview’s coordinate system.
+
+`frame`은 `superview`(상위 view)의 좌표 안에서 `view`의 위치와 크기를 정의합니다.
+
+> bounds:
+>
+> The bounds rectangle, which describes the view’s location and size in its own coordinate system.
+
+`bounds`는 본인의 고유한 좌표 안에서 위치와 크기를 정의합니다.
+
+아직 뜻은 정확하게 모르겠지만 가장 중요한 차이점이 보입니다.
+`frame`은 **상위 view의 좌표** 안에서 `CGRect`가 정의된다는 것이고, `bounds`는 **고유한 좌표** 안에서 `CGRect`가 정의된다는 것이죠.
+
+그래도 감이 조금은 오는 `frame`부터 확인해보겠습니다.
+
+![FrameBoundsCanvas](https://i.imgur.com/O7WP2cL.png)
+
+## frame
+
+이렇게 생긴 화면 구성이 있다고 가정해봅시다.
+
+![FrameHierarchy](https://i.imgur.com/u2ZB1My.png)
+
+“SuperView ➡️ ParentView ➡️ ChildView“의 계층 구조를 갖고 있습니다. 각각의 하위 view는 상위 view에 nested되어 있습니다.
+
+지금 이 상태에서 ParentView와 ChildView의 `frame`을 출력하면 어떤 값이 나오는지 한 번 볼게요.
+
+![FrameTest](https://i.imgur.com/BVvqJyo.png)
+
+`frame`은 상위 View 안에서의 `CGRect`라고 했습니다. 위 출력은 순서대로 x좌표, y좌표, 너비, 높이였죠?
+
+![FrameTest2](https://i.imgur.com/2DMw2cE.png)
+
+ParentView의 `CGPoint`와 `CGSize`에 수치를 메겨보았습니다. `frame`은 어느정도 느낌이 오죠?
+
+ParentView의 기준점(origin)이 상위 뷰인 SuperView의 기준점(origin)에서 `(24, 186)`만큼 떨어져있고, 크기(size)는 `(342, 472)`라는 것이죠!
+
+`frame`의 설명 그대로 해당 View의 **상위 View에 대한 좌표값**이라는 것을 알 수 있습니다.
+
+제대로 이해한 것인지 확인하기 위해서 ParentView의 기준점(origin)을 한번 (0, 0)으로 바꿔보았습니다.
+동시에 크기(size)도 (320, 380)으로 줄여봅시다.
+
+![FrameTest3](https://i.imgur.com/nIYdPiX.jpg)
+
+왼쪽이 변경 전, 오른쪽이 변경 후입니다. 잘 보면, Child View는 변한 게 없습니다.
+절대적인 위치는 Parent View의 위치가 바뀌었기 때문에 같이 바뀐 것이고, 기준점(origin)이나 크기(size)는 그대로 유지되었습니다.
+ParentView의 `CGRect`는 당연하게 변경되었습니다. 기준점(origin)의 좌표가 (0, 0)이 되었고, 크기도 (320, 380)으로 줄어들었습니다.
+
+이제 확실하게 알 것 같습니다! `frame`은 상위 View에 대한 좌표값이기 때문에 **상위 View의 기준점(origin)이 이동하면 함께 이동**하는 것이죠.
+
+## bounds
+
+이번엔 설명이 조금 모호한 `bounds`를 알아보겠습니다. 우선 아까 예시를 그대로 가져와서 `bounds` 값을 찍어보았습니다.
+
+![BoundsPrint](https://i.imgur.com/Pex6uMi.png)
+
+두 View 모두 기준점(origin) 이 (0, 0)이 나오네요..?? 🤔
+
+네 그렇습니다.. `frame`과 다르게 `bounds`는 “본인의 고유한 좌표”라는 말에서 알 수 있듯이 **상위 View와는 아무런 관련 없이 갖는 값**입니다.
+
+자 여기까진 알겠고, 그럼 `bounds`값에 변형을 줘볼까요?
+
+```swift
+self.parentView.bounds.origin = CGPoint(x: 50, y: 100)
+```
+
+이렇게 한 번 Parent View의 `bounds`를 (50, 100)만큼 이동시켜볼게요.
+
+![BoundsEx](https://i.imgur.com/FrRBr1V.png)
+
+음.. ParentView는 가만히 있고, ChildView가 왼쪽 위로 이동했습니다. 🤔🤔🤔
+
+전혀 모르겠네요. 왜죠..?
+
+`bounds`를 이해하기 위해서는 저 화면을 조금 더 넓게 볼 필요가 있습니다.
+`frame`이야 저 사각형의 View 자체를 이동시킨 것이 맞습니다.
+하지만 `bounds`의 경우에는 View를 움직이는게 아니라 **해당 View 안에서 보이는 공간의 좌표를 바꿔준다**는 의미입니다.
+
+네 어렵죠..? (아닌가요? 저만 어렵나요?)
+
+그러니까 우리가 사진을 확대해서 볼 때 한 점을 찍고 드래그를 하죠?
+
+![Pointer](https://i.imgur.com/Yn0T8Fj.png)
+
+요 포인터 있잖아요?
+
+이 포인터로 딱 찍은 그 점이 바로 기준점(origin)이라고 생각하고, 그 점을 누르고 오른쪽 아래(50, 100)로 내린겁니다!
+
+![PointerDrag](https://i.imgur.com/jxmmS0i.png)
+
+그러면 사진은 어떻게 되나요?
+왼쪽 위로 올라갑니다.
+
+ParentView는 안에 있는 다른 View들을 담고 있는 하나의 또 다른 화면이라고 생각하면 됩니다. 그 화면에서 드래그를 해서 보고 있는 화면을 옮기는 것이죠.
+
+> 근데 저게 화면이면, 밖으로 튀어나오면 안되는 거 아닌가요?
+
+맞아요. 그래서 튀어나오지 않도록 해줄 수도 있습니다.
+`clipsToBounds`라는 어트리뷰트를 `true`로 해주면
+
+![ClipsToBounds](https://i.imgur.com/6ResdTW.png)
+
+이렇게 화면에서 벗어난 View를 잘라서 표현할 수 있습니다.
+
+자 그런데 위에서 이해를 돕기 위해서 이미지를 확대해서 드래그하는 상황을 예시로 들었었죠?
+사실 정확히 이 상황을 사용하는 UI 컴포넌트가 하나 있습니다.
+바로 ScrollView에요.
+ScrollView에서 드래그를 할 때 사실은 내부적으로 해당 View의 `bounds`를 계속해서 바꿔주고 있는 겁니다.
+이런 사실은 ScrollView의 `contentOffset`을 출력해보면 확인해볼 수 있습니다.
+
+> 그런데 혹시 `size`는 `frame`과 `bounds`에서 별 차이가 없어서 언급이 없는건가요?
+
+아닙니다. 상당히 큰 차이가 있어요.
+지금까지 우리는 **기준점(origin)** 에 초점을 맞춰서 공부했죠?
+그도 그럴게 두 예시 모두 크기는 동일하게 나왔거든요.
+그래서 크기는 `frame`과 `bounds`가 동일하냐?하면, 그건 또 아닙니다.
+
+이 차이는 View를 회전시킬 때 확인할 수 있습니다.
+
+![Rotate](https://i.imgur.com/6krZKvJ.png)
+
+위와 같이 View 하나를 45도 돌려보았습니다. 이 때의 `frame.size`와 `bounds.size`를 출력해보면,
+
+![RotatePrint](https://i.imgur.com/fKzsYYh.png)
+
+분명 하나의 View의 `size`인데 두 값이 다르게 나옵니다.
+
+`frame`의 경우 **View를 감싸고 있는 사각형의 좌표와 크기** 를 값으로 갖습니다.
+왜냐면 상위 View에 대한 상대적 좌표이기 때문에 정확히 사각형의 형태이기 때문이죠.
+반면 `bounds`는 회전이 됐다면 된 상태 그 **모습 그대로의 좌표와 크기** 를 값으로 갖습니다.
+본인만의 고유한 좌표계에 대한 값이기 떄문입니다.
+
+![FramevsBounds](https://i.imgur.com/RBiE6M6.png)
+
+출처: [iOS Frame vs Bounds](https://stackoverflow.com/questions/1210047/cocoa-whats-the-difference-between-the-frame-and-the-bounds)
+
+사진으로 보면 이해가 매우 빠를 것 같아서 StackOverflow에서 이미지를 하나 가져왔습니다.
