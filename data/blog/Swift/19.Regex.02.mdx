@@ -450,6 +450,8 @@ print(match.output.2, match.output.4)
 
 이렇게 추출해낸 값들은 `output.2`와 같이 튜플의 형태로 사용할 수 있습니다.
 
+### 유니코드 활용
+
 그런데 여기서 애플이 갑자기 급발진을 합니다...!
 
 ```swift
@@ -487,23 +489,154 @@ let regex = #/
 
 `\P{currencySymbol}`이 대체 뭔데 하면서 이것저것 찾아보던 중...
 
-![UnicodeGroup](https://i.imgur.com/GWxbv82.png)
+![UnicodeGroup](https://i.imgur.com/WY2GEa1.png)
 
-예.. Regex에 원래 있는 표현이였습니다.
+예.. Regex에 원래 있는 표현이였습니다. *(출처는 [애플 공식 문서](https://developer.apple.com/documentation/foundation/nsregularexpression)입니다.)*
 
-Unicode에서 정의한 그룹에 속해있는지를 검사하는 표현이라고 하네요.
+Unicode에서 정의한 프로퍼티에 속해있는지 검사하는 표현들이라고 하네요.
 
-`\p{}`가 그룹에 속해있는지이고 `\P{}`는 그룹에 속해있지 않은지를 검사하는 표현이라고 해요.
+`\p{}`가 프로퍼티에 속해있는지이고 `\P{}`는 프로퍼티에 속해있지 않은지를 검사하는 표현이라고 해요.
+
+지정된 유니코드 프로퍼티들은 [여기](https://www.unicode.org/Public/UCD/latest/ucd/PropertyValueAliases.txt)에서 확인하실 수 있습니다.
 
 근데요.. 또 `currencySymbol`은 그룹 이름에 없더라고요..?
 
 대신 비스무리한 건 있었습니다.
 
-> \\p\{Sc\} or \\p\{Currency_Symbol\}: any currency sign.
+> `\\p\{Sc\}` or `\\p\{Currency_Symbol\}` : any currency sign.
 
-애플이 또 나름대로 래핑을 한 건지 뭔지... 알 수가 없군요.
+~~애플이 또 나름대로 래핑을 한 건지 뭔지... 알 수가 없군요.~~
 
-뭔가 알아내면 내용을 추가해놓도록 하겠습니다.
+~~뭔가 알아내면 내용을 추가해놓도록 하겠습니다.~~
+
+[Unicode.GeneralCategory](https://developer.apple.com/documentation/swift/unicode/generalcategory/currencysymbol)
+
+하하 😲 Swift에 정의되어 있는게 맞더군요!
+
+![SwiftUnicode](https://i.imgur.com/HSdTBDV.png)
+
+[Unicode 문서](https://developer.apple.com/documentation/swift/unicode)를 보시면 미리 분류된 case들이 `enum`으로 정의되어 있고..
+
+![currencySymbol](https://i.imgur.com/UXaQ7qc.png)
+
+그 중 `GeneralCategory`에 `currencySymbol`이 정의되어 있습니다.
+
+사실 WWDC22 영상에서도 **"Unicode Property"** 를 사용한다고 언급하는데요, 제가 모르던 개념이였기 때문에 띠용했던게 아닐까 싶습니다 😅
+
+역시 오늘도 먹히는 아는만큼 보인다...
+
+---
+
+다시 돌아가서...
+
+이제 우리는 `(?<currency> \p{currencySymbol})` 이걸 통해서 통화의 기호를 받아올 수 있죠?
+
+```swift
+func pickStrategy(_ currency: Substring) -> Date.ParseStrategy {
+  switch currency {
+  case "$": return .date(.numeric, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+  case "£": return .date(.numeric, locale: Locale(identifier: "en_GB"), timeZone: .gmt)
+  default: fatalError("We found another one!")
+  }
+}
+```
+
+그걸 이런 식으로 활용해 날짜를 파싱하는 방법에 차이를 만들어주려고 하나봅니다.
+
+```swift
+ledger.replace(regex) { match -> String in
+  let date = try! Date(String(match.date), strategy: pickStrategy(match.currency))
+
+  // ISO 8601, it's the only way to be sure
+  let newDate = date.formatted(.iso8601.year().month().day())
+
+  return newDate + match.middle + match.currency
+}
+```
+
+주어진 문자열에서 `regex`를 사용해 애매모호했던 날짜 부분을 통화에 따라 다른 파싱 방식을 써서
+
+확실한 형태의 `newDate`로 변환해서 저장해주는 함수입니다.
+
+![NewDateLedger](https://i.imgur.com/KcrKhkd.png)
+
+위의 형태에서 아래 형태로요!
+
+여기까지 모든 게 완벽해 보이지만, 한 가지 고려할 점이 하나 더 있습니다.
+
+지금까지 저희가 사용한 정규식은 **모든 데이터가 제자리에 있을 때만!** 동작하거든요.
+
+어떤 필드의 자리에 조건에 맞는 데이터가 없을 때는 매칭이 실패해서 해당 레코드 자체가 인식되지 못하겠죠?
+
+Swift는 정규식에 `Optional`을 도입한 `TryCapture`이라는 기능을 제공합니다.
+
+```swift
+// CREDIT  <proprietary>  <redacted>  200.23  A1B34EFF  ...
+let fieldSeparator = /\s{2,}|\t/
+let field = OneOrMore {
+  NegativeLookahead { fieldSeparator }
+  CharacterClass.any
+}
+let transactionMatcher = Regex {
+  Capture { /CREDIT|DEBIT/ }
+  fieldSeparator
+
+  TryCapture(field) { timestamp ~= $0 ? $0 : nil }
+  fieldSeparator
+
+  TryCapture(field) { details ~= $0 ? $0 : nil }
+  fieldSeparator
+
+  // ...
+}
+```
+
+내용에 상관없이 필드별로 데이터를 분리하기 위해 `NegativeLookahead`를 다시 한 번 활용해 `field`를 정의해주고요..
+
+`TryCapture(field)`를 사용해 `field` 범위의 값이 `timestamp`나 `details`의 범위에 있다면 해당 값을 "Capture"하고, 범위에서 벗어난 값이라면 `nil`을 "Capture"합니다.
+
+이제 진짜 끝이겠죠? 👀
+
+하나 더 남았습니다 😂
+
+지금까지 사용하던 `fieldSeparator`에서 문제가 하나 발생하는데요,
+
+```swift
+let fieldSeparator = /\s{2,}|\t/
+```
+
+2개 이상의 space 혹은 탭을 매칭시키는 정규식이였죠?
+
+이 중에서 **2개 이상**의 space가 문제가 된다고 합니다.
+
+![Global Backtracking](https://i.imgur.com/5GlPBeA.gif)
+
+이후에 오는 패턴이 실패하면, 매칭되었던 space의 개수를 1개씩 줄여가며 최소 개수인 2개가 될 때까지 계속해서 다시 시도한다고 하네요.
+
+애플이 만든 애니메이션을 참고하면 아마 이해가 되실 거에요!
+
+이 현상은 Regex의 **Global Backtracking**이라는 특징 때문에 일어납니다.
+
+> "때문에"라기엔 이 특징 덕분에 정규표현식이 강력한거긴 합니다.
+> 다만 이 경우에는 부분적으로 **Local Backtracking**을 사용하는 편이 더 효율적이기 때문에라고 이해해주세요!
+
+```swift
+let fieldSeparator = Local { /\s{2,}|\t/ }
+```
+
+사용법은 `Local`로 기존 표현식을 한 번 감싸주면 됩니다. 쉽죠? 😁
+
+`Local` 빌더를 사용하면 어떤 점이 효율적인걸까요?
+
+`Local` 빌더에 포함된 정규식이 한 번 매칭되면 그 이후에는 해당 정규식을 다시 검사하지 않습니다.
+
+위 gif에서 볼 수 있었던 백트래킹이 일어나지 않는다는 거죠!
+
+저희가 사용한 예시의 경우에는 필드와 필드가 서로 확실하게 구분되어 있기 때문에 이런 **Local Backtracking**이 더 효율적일 수 있었던 것입니다.
+
+사실 이 `Local` 빌더는 Regex의 "atomic non-capturing group"이라는 기능을 래핑한 기능입니다.
+
+애플이 생각하기에 보기만 해도 두려운 이름이라 좀 더 친근한 `Local`이라는 이름을 붙여줬다고 해요.
 
 > References
 
@@ -514,3 +647,5 @@ Unicode에서 정의한 그룹에 속해있는지를 검사하는 표현이라�
 [WWDC22 - Meet Swift Regex](https://developer.apple.com/wwdc22/110357)
 
 [엘바노프 스튜디오 공식 블로그 겸 낙서장 - 정규표현식 Lookahead, Lookbehind 기능 이해하기](https://elvanov.com/2388)
+
+[Unicode Regular Expressions](https://www.regular-expressions.info/unicode.html#category)
