@@ -798,9 +798,33 @@ default:
 
 하하..
 
-[여기](https://developer.apple.com/forums/thread/714508)를 보면 저만 겪는 문제도 아닌 것 같긴 합니다만.. 적용이 안된 내용을 WWDC 세션에서 소개했을리가 없는 데 말이죠.
+~~[여기](https://developer.apple.com/forums/thread/714508)를 보면 저만 겪는 문제도 아닌 것 같긴 합니다만.. 적용이 안된 내용을 WWDC 세션에서 소개했을리가 없는 데 말이죠.~~
 
-이 부분도 추가적으로 알게되는 내용이 있으면 추가해두도록 하겠습니다...
+~~이 부분도 추가적으로 알게되는 내용이 있으면 추가해두도록 하겠습니다...~~
+
+부스트캠프 동료분들이 관련 내용을 찾아주셨습니다!
+
+![SE-0357: Regex String Processing Algorithms](https://forums.swift.org/t/se-0357-regex-string-processing-algorithms/57225)
+![[Accepted with modifications] SE-0357: Regex String Processing Algorithms](https://forums.swift.org/t/accepted-with-modifications-se-0357-regex-string-processing-algorithms/58706)
+
+Swift 커뮤니티 포럼을 보시면 될 것 같습니다.
+
+```swift
+switch "abcde" {
+case /abc/:     // I'd expect this regular expression
+case /.*abc.*/: // to work like this one
+case /^abc$/:   // rather than this one
+default:      
+}
+```
+
+`/abc/`의 기능이 **문자열의 부분**만 충족해도 case로 처리할 지, 혹은 **전체 문자열**이 매칭되어야 case로 처리할 지에 대한 토론이 있었던 것 같습니다.
+
+`firstMatch`와 `wholeMatch` 중 어떤 매칭 방법을 사용할 지를 고민하셨던 것이죠.
+
+Perl이나 Ruby같은 다른 언어들의 경우들을 참고해가며 토론하신 것 같지만, 아쉽게도 결론이 지어지지 못해 이 기능은 구현되지 못한 것으로 보이네요.
+
+WWDC 세션에 발표까지 됐지만 커뮤니티에 의해 구현이 되지 않은 기능도 있을 수 있다는 깨달음을 얻을 수 있었습니다. 😅
 
 ---
 
