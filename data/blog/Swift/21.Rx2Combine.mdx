@@ -1,0 +1,52 @@
+---
+title: 🍎 Swift - RxSwift에서 Combine으로 전환하기
+date: 2023-10-22
+tags:
+  - Swift
+draft: false
+summary: Rx에서 Combine으로 전환하는 법, 그리고 주의할 점
+---
+
+<TOCInline toc={props.toc} indentDepth={2} />
+오늘은 RxSwift에서 Combine으로 전환하는 과정과, 주의할 점들을 정리해보면서 학습할겁니다!
+사실 저에게는 전환이라기보다는, 둘 다 알아두자! 라는 식이긴 하지만요.
+
+# Observable ➡️ Publisher
+
+가장 먼저 눈에 띄는 점은 `Observable`에 대응되는 `Publisher`일겁니다.
+
+```swift
+class Observable<Element>: ObservableType {
+	func subscribe<Observer: ObserverType>(_ observer: Observer)
+		-> Disposable where Observer.Element == Element {
+		// 
+	}
+}
+```
+
+```swift
+protocol Publisher<Output, Failure> {
+	associatedType Output
+	associatedType Failure: Error
+	
+	func receive<S>(subscriber: S)
+		where S: Subscriber,
+		Self.Failure == S.Failure,
+		Self.Output == S.Input
+}
+```
+
+가장 큰 차이점은 `Observable`은 클래스 구현체이고, `Publisher`는 프로토콜이라는 점입니다.
+
+그렇기 때문에 Rx에서는 이 `Observable`을 한 번 래핑해서 사용하거나, 상속을 하고 `subscribe` 메서드를 `override`합니다.
+Combine에서는 `Publisher` 프로토콜을 채택하고 `receive` 메서드를 구현해줌으로써 커스텀  `Publisher`를 구현할 수 있죠.
+> 보통 애플이 제공하는 `Publisher` 구현체들은 구조체로 구현되어 있습니다.
+
+실제로 Rx의 `Maybe`나 `Single` 같은 구현체들은 `Observable`을 래핑한 형태로 구현되어 있습니다.<sup>[1](#PrimitiveSequence)</sup>
+
+또한 `Publisher`는 `Failure` 타입을 필요로 합니다. 에러가 발생할 경우를 항상 염두에 두고 만들어졌다는 의미입니다.
+
+만약 Fail하지 않는 `Publisher`를 만들 때는, `Never`를 `Failure`로 사용하면 됩니다.
+
+<a name="PrimitiveSequence">1</a>: https://github.com/ReactiveX/RxSwift/blob/473b7a7180df6ff58925a5bd1ed039bccdc35250/RxSwift/Traits/PrimitiveSequence/PrimitiveSequence.swift
+

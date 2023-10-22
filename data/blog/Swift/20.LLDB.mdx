@@ -1,0 +1,198 @@
+---
+title: 🍎 Swift - LLDB
+date: 2023-09-17
+tags:
+  - Swift
+draft: false
+summary: Xcode를 더 효율적으로 사용하는 방법
+---
+
+<TOCInline toc={props.toc} indentDepth={2} />
+
+# LLDB (Low-Level-Debugger)
+
+> LLDB is a next generation, high-performance debugger. It is built as a set of reusable components which highly leverage existing libraries in the larger [LLVM Project](https://llvm.org/), such as the Clang expression parser and LLVM disassembler.
+
+LLDB는 LLVM(Low-Level-Virtual-Machine)의 서브 프로젝트들 중 하나로서, 말 그대로 디버거입니다.
+LLVM 프로젝트는 크리스 래트너에 의해 시작되었고, 이후 애플에 영입되어 현재는 Xcode의 기본 디버거로 사용되고 있습니다.
+
+## LLDB 사용하기
+
+![](https://i.imgur.com/Ox2DHky.png)
+
+LLDB는 Xcode의 하단에서 실행 중인 프로세스가 일시 정지되거나 breakpoint에 걸렸을 때 사용할 수 있습니다.
+이런 화면 많이 보셨죠?
+
+저는 LLDB를 모를 때 11데시벨 뭐 이런건가..? 했는데 lldb라는 디버거라는 뜻이였어요.. 😅
+
+```
+(lldb) <noun> <verb> [-options [option-value]] [argument [argument...]]
+```
+
+LLDB의 명령어는 이런 구조로 이루어져 있습니다.
+
+`<noun>`과 `<verb>`에는 command와 subcommand가 옵니다.
+(`breakpoint`, `set`, `list` 같은...)
+
+`option`은 다른 cli 툴과 비슷하게 `-f` 혹은 `--file`같이 `-`로 시작합니다.
+
+간단한 예시를 통해 쉽게 살펴봅시다.
+
+```
+(lldb) breakpoint set --file foo.c --line 12
+(lldb) breakpoint set -f foo.c -l 12
+```
+
+`breakpoint`라는 명령어의 하위 명령어 `set`이 실행되고 있네요.
+`--file` 옵션을 통해 `foo.c` 파일을 지정해주고, `--line` 옵션을 통해 12번 라인을 지정해주고 있습니다.
+
+### help와 apropos
+
+당연하게도 모든 커맨드를 다 외울수는 없겠죠?
+`man`과 같은 도움말 커맨드가 LLDB에도 당연하게 있습니다.
+
+![](https://i.imgur.com/qCCGggv.png)
+
+이렇게 `help`와 커맨드, 혹은 서브커맨드의 도움말을 볼 수 있구요..
+
+![](https://i.imgur.com/JwBGaAu.png)
+
+`apropos`라는 명령어를 사용하면 주어진 키워드를 사용해 관련된 커맨드들을 안내해줍니다.
+
+## Breakpoint
+
+위에서 잠깐 맛본 것 처럼 LLDB를 사용해 breakpoint를 설정해줄 수 있는데요,
+이 부분은 사실 Xcode에서 GUI 환경으로 제공하고 있기 때문에 간단하게 살펴보고 넘어갑시다.
+
+### Breakpoint 만들기
+
+일단 breakpoint를 사용하려면 만들어야겠죠?
+
+- Function Name
+	```
+	(lldb) breakpoint set --name viewDidLoad
+	```
+- File
+	```
+	(lldb) breakpoint set --file ViewController.swift --line 20
+	```
+- Condition
+	```
+	(lldb) breakpoint set --name "viewWillAppear" --condition animated
+	```
+
+함수의 이름, 파일, 혹은 조건을 주어서 breakpoint를 만들 수 있답니다.
+Xcode에서 하는 것과 같은 것 같다구요?
+맞아요.. Xcode의 breakpoint 기능도 LLDB를 사용하거든요.
+그래서 사실 그게 그거랍니다 😊
+
+### Breakpoint 리스트 확인하기
+
+```
+(lldb) breakpoint list
+```
+
+![](https://i.imgur.com/DnuudUr.png)
+
+이렇게 현재 생성되어 있는 breakpoint들의 목록도 살펴볼 수 있습니다.
+
+### Breakpoint 삭제/비활성화하기
+
+```
+(lldb) breakpoint delete (breakpoint id)
+(lldb) breakpoint disable (breakpoint id)
+```
+
+![](https://i.imgur.com/NDyJlnO.png)
+
+비활성화하거나 삭제하는 기능도 당연히 있어야겠죠.
+명령어의 뒤에 breakpoint의 id를 주면 특정 breakpoint에 대해서만 수행도 가능합니다.
+
+## Stepping
+
+breakpoint를 걸었다면, 다음으로 넘어가는 기능도 있을겁니다.
+
+![](https://i.imgur.com/CuVEe6G.png)
+
+그런데 이 기능도 터미널의 상단에 버튼으로 쉽게 제어할 수 있기 때문에 간단하게 살펴봅시다.
+
+- Stepping Over
+	```
+	(lldb) next
+	```
+	breakpoint가 걸린 지점의 바로 다음 statement로 진행합니다.
+- Stepping In
+	```
+	(lldb) step
+	```
+	breakpoint가 걸린 지점 다음이 함수를 호출한다면, 해당 함수의 시작 지점으로 진행합니다.
+- Stepping Out
+	```
+	(lldb) finish
+	```
+	현재 함수를 끝내고 그 이후의 statement에 breakpoint를 걸어줍니다.
+
+## Expression
+
+breakpoint로 인해 프로세스가 멈춰 있을 때 LLDB를 사용할 수 있다고 했었죠?
+이 때의 상황에서 expression 명령어를 통해서 특별한 동작들을 시킬 수 있습니다.
+
+사실 이 부분 때문에 LLDB에 대해서 알아볼 마음이 생겼답니다 😊
+
+### po
+
+가장 많이 사용될 명령어 `(lldb) po`입니다.
+객체 인스턴스에 대한 정보를 콘솔에 출력해주기 때문이죠!
+
+![](https://i.imgur.com/rSYq6Al.png)
+
+참고로 `po`는 `print -O --`의 alias입니다.
+
+![](https://i.imgur.com/R0Tdx3i.png)
+
+이렇게 인스턴스의 정보를 알려줍니다.
+
+```swift
+class Test: NSObject {
+    var a = 1
+
+    override var debugDescription: String {
+        return "Test Instance!!"
+    }
+}
+```
+
+![](https://i.imgur.com/5UreJHW.png)
+
+참고로 이 때 출력되는 값은 `NSObject`의 `debugDescription` 값이기 때문에, 이를 `override`해주면 커스텀 된 출력값을 얻을 수도 있습니다.
+
+### variable 사용하기
+
+![](https://i.imgur.com/ESbPcV2.png)
+
+```
+(lldb) e (variable)
+```
+
+을 사용하면 해당 variable에 대한 정보를 알 수 있고, 주어지는 `$R0`와 같은 변수로 접근할수도 있게 됩니다.
+
+```
+(lldb) e $R0.a = 2
+```
+
+를 사용하면, 해당 변수의 `a` 값을 2로 업데이트 해주겠다는 의미입니다.
+실제로 다시 한 번 `e test`를 통해서 정보를 조회해보니 `a`의 값이 2가 된 것을 알 수 있습니다.
+
+추가적으로 이미 있는 변수의 값을 변경하는 것 뿐만 아니라
+새로운 변수를 정의해줄 수도 있습니다!
+
+```
+(lldb) e let $someNumber = 10
+(lldb) e var $someString = "Hello, World!"
+```
+
+![](https://i.imgur.com/WrGGtHA.png)
+
+> 출처
+> [Tutorial - 🐛 LLDB](https://lldb.llvm.org/use/tutorial.html)
+> [야곰닷넷 - LLDB 정복](https://yagom.net/courses/start-lldb/)
