@@ -8,10 +8,14 @@ summary: Rx에서 Combine으로 전환하는 법, 그리고 주의할 점
 ---
 
 <TOCInline toc={props.toc} indentDepth={2} />
+
+# RxSwift에서 Combine으로 전환하기
+
 오늘은 RxSwift에서 Combine으로 전환하는 과정과, 주의할 점들을 정리해보면서 학습할겁니다!
+
 사실 저에게는 전환이라기보다는, 둘 다 알아두자! 라는 식이긴 하지만요.
 
-# Observable ➡️ Publisher
+## Observable ➡️ Publisher
 
 가장 먼저 눈에 띄는 점은 `Observable`에 대응되는 `Publisher`일겁니다.
 
@@ -38,15 +42,62 @@ protocol Publisher<Output, Failure> {
 
 가장 큰 차이점은 `Observable`은 클래스 구현체이고, `Publisher`는 프로토콜이라는 점입니다.
 
-그렇기 때문에 Rx에서는 이 `Observable`을 한 번 래핑해서 사용하거나, 상속을 하고 `subscribe` 메서드를 `override`합니다.
-Combine에서는 `Publisher` 프로토콜을 채택하고 `receive` 메서드를 구현해줌으로써 커스텀  `Publisher`를 구현할 수 있죠.
+그렇기 때문에 Rx에서는 이 Observable을 한 번 래핑해서 사용하거나, 상속을 하고 `subscribe` 메서드를 override합니다.
+Combine에서는 Publisher 프로토콜을 채택하고 `receive` 메서드를 구현해줌으로써 커스텀  Publisher를 구현할 수 있죠.
 > 보통 애플이 제공하는 `Publisher` 구현체들은 구조체로 구현되어 있습니다.
 
-실제로 Rx의 `Maybe`나 `Single` 같은 구현체들은 `Observable`을 래핑한 형태로 구현되어 있습니다.<sup>[1](#PrimitiveSequence)</sup>
+실제로 Rx의 `Maybe`나 `Single` 같은 구현체들은 Observable을 래핑한 형태로 구현되어 있습니다.<sup>[1](#PrimitiveSequence)</sup>
 
-또한 `Publisher`는 `Failure` 타입을 필요로 합니다. 에러가 발생할 경우를 항상 염두에 두고 만들어졌다는 의미입니다.
+또한 Publisher는 `Failure` 타입을 필요로 합니다. 에러가 발생할 경우를 항상 염두에 두고 만들어졌다는 의미입니다.
 
-만약 Fail하지 않는 `Publisher`를 만들 때는, `Never`를 `Failure`로 사용하면 됩니다.
+만약 Fail하지 않는 Publisher를 만들 때는, `Never`를 Failure로 사용하면 됩니다.
 
-<a name="PrimitiveSequence">1</a>: https://github.com/ReactiveX/RxSwift/blob/473b7a7180df6ff58925a5bd1ed039bccdc35250/RxSwift/Traits/PrimitiveSequence/PrimitiveSequence.swift
+## Observer ➡️ Subscriber
 
+이번에는 반대의 위치에 있는 **"구독자"** 입니다.
+
+RxSwift는 `Event`라는 enum으로 구독한 Observable의 결과를 구분합니다.<sup>[2](#Event)</sup>
+
+```swift
+@frozen
+enum Event<Element> {
+    /// Next element is produced.
+    case next(Element)
+    /// Sequence terminated with an error.
+    case error(Swift.Error)
+    /// Sequence completed successfully.
+    case completed
+}
+```
+
+반대로 Combine은 이를 enum으로 구분하지는 않고, 별개의 메서드들을 제공해서 각각에 대한 핸들링이 가능하도록 구현되었습니다.
+
+```swift
+protocol Subscriber<Input, Failure>: CustomCombineIdentifierConvertible {
+	associatedType Input
+	associatedType Failure: Error
+
+	func receive(subscription: Subscription)
+	func receive(_ input: Self.Input) -> Subscriber.Demand
+	func receive(completion: Subscribers.Completion<Self.Failure>)
+}
+
+@frozen
+enum Completion<Failure> where Failure: Error {
+	case finished
+	case failure(Failure)
+}
+```
+
+가장 차이점이라고 한다면, Combine의 Subscriber는 Publisher의 `Failure` 타입과 매칭해서 사용해야한다는 점입니다.
+
+RxSwift가 불확실한 타입의 `Error`를 case로 제공해준다면, Combine은 정확한 타입의 `Failure: Error`를 `receive(completion:)` 메서드를 통해 제공하고 있습니다.
+
+## Subscription
+
+`Subscription`은 Publisher와 Subscriber를 연결하는 인스턴스를 표현합니다.
+
+
+
+<a name="PrimitiveSequence">1</a>: [RxSwift - PrimitiveSequence.swift](https://github.com/ReactiveX/RxSwift/blob/473b7a7180df6ff58925a5bd1ed039bccdc35250/RxSwift/Traits/PrimitiveSequence/PrimitiveSequence.swift)
+<a name="Event">2</a>: [RxSwift - Event](https://github.com/ReactiveX/RxSwift/blob/473b7a7180df6ff58925a5bd1ed039bccdc35250/RxSwift/Event.swift)
