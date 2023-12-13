@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "data/blog/Swift/23.MusicSpot.mdx",
+                "file": "data/blog/Swift/22.Library,Framework,Package.mdx",
                 "mode": "source",
                 "backlinks": true,
                 "source": false
@@ -86,7 +86,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "data/blog/Swift/23.MusicSpot.mdx",
+                "file": "data/blog/Swift/22.Library,Framework,Package.mdx",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "data/blog/Swift/23.MusicSpot.mdx",
+                "file": "data/blog/Swift/22.Library,Framework,Package.mdx",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               }
@@ -126,7 +126,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "data/blog/Swift/23.MusicSpot.mdx"
+                "file": "data/blog/Swift/22.Library,Framework,Package.mdx"
               }
             }
           },
@@ -165,11 +165,13 @@
       "table-editor-obsidian:Advanced Tables Toolbar": false
     }
   },
-  "active": "c168b0e248306492",
+  "active": "14b8be8d15ab6bf8",
   "lastOpenFiles": [
+    "data/blog/Swift/21.Rx2Combine.mdx",
+    "data/blog/Swift/22.Library,Framework,Package.mdx",
+    "data/blog/Swift/20.LLDB.mdx",
     "data/blog/Swift/22.RxCombineMulticast.mdx",
     "data/blog/Swift/23.MusicSpot.mdx",
-    "data/blog/Swift/21.Rx2Combine.mdx",
     "package-lock.json",
     "node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/core/README.md",
     "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/core/README.md",
@@ -180,8 +182,6 @@
     "node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base/package.json",
     "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/core/package.json",
     "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/semantic-conventions/LICENSE",
-    "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/semantic-conventions/build/src/trace/index.js.map",
-    "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/semantic-conventions/build/src/trace/index.js",
     "node_modules/lint-staged/node_modules/yaml/README.md",
     "node_modules/cliui/node_modules/wrap-ansi/readme.md",
     "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/sdk-trace-base/README.md",

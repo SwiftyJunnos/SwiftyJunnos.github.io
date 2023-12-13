@@ -1,0 +1,161 @@
+---
+title: 🍎 Swift - 라이브러리-프레임워크-패키지 무슨 차이인데?
+date: 2023-11-06
+tags:
+  - Swift
+draft: false
+summary: 뭔가 굉장히 밀접하게 연관되어 있는 것 같은 이 셋.. 무슨 차이가 있을까?
+---
+
+<TOCInline toc={props.toc} indentDepth={2} />
+
+# 배경
+
+키워드: **Library, Framework, Package**
+
+뭔가 굉장히 밀접하게 연관되어 있는 것 같은 이 셋.. 무슨 차이가 있을까?
+
+# 과정
+
+## Static과 Dynamic
+
+이 둘은 링크 방식의 차이에 대한 구분이다.
+
+> **Link**: 모듈과 앱의 코드를 하나로 합치는 과정
+
+![](https://i.imgur.com/fugnBVX.png)
+![](https://i.imgur.com/huSqLJx.png)
+
+앱의 실행 파일 (executable)에 모듈의 코드가 포함되면 **Static**
+
+- 앱 실행 파일 크기 증가
+    - 실행 시간 증가
+- 런타임 성능 증가
+- 컴파일 속도 하락
+
+![](https://i.imgur.com/DKwIWKj.png)
+![](https://i.imgur.com/5ZvcPIg.png)
+
+앱의 실행 파일 (executable)에 모듈의 코드가 포함되지 않고
+
+모듈의 실행 파일 (executable)의 참조가 포함되면 **Dynamic**
+
+- 앱 실행 파일 크기 감소
+    - 실행 시간 감소
+- pre-main 시간 증가
+- 컴파일 속도 증가
+
+## Static Library vs Dynamic Library
+
+### Library
+
+> Xcode Target의 일부로 빌드되지 않은 코드 및 데이터 조각을 정의한 것
+
+> → 라이브러리는 리소스 파일을 포함할 수 없습니다. (이미지, 에셋 등)
+
+### Static Library
+
+컴파일 때 필요한 코드들을 모두 Execute 파일로 복사해 사용한다.
+
+`.a` 형식의 파일로 사용
+
+### Dynamic Library
+
+라이브러리의 참조 값만 저장하고, 실제 코드는 Execute 파일에서 제외한다.
+
+런타임에 Dynamic Linker가 Dynamic Library들을 링크한다.
+
+`.dylib` 형식의 파일로 사용
+
+> 💡 CoreData, CoreBlutooth와 같은 Apple 라이브러리들은 동적 라이브러리를 사용합니다. 이 외에는 **프레임워크 외부**에 독립된 동적 라이브러리를 생성하거나 사용할 수 없습니다.
+> ![](https://i.imgur.com/uK7j3sX.png)
+> _Static Library만 있죠?_
+
+## Static Framework vs Dynamic Framework
+
+### Framework
+
+> 소스파일 외에도 추가 리소스까지 모든 것을 하나의 Bundle로 묶어놓은 것
+
+> → Nib, 이미지, 헤더 파일, Localization 파일 등을 포함할 수 있습니다.
+
+프레임워크는 동적 라이브러리를 포함합니다.
+
+프레임워크는 런타임 중 메모리에 오직 하나만 올라갑니다.
+
+> 💡 프레임워크의 Static / Dynamic 설정 방법
+> 
+> ![](https://i.imgur.com/Bbqt0Kk.png)
+> 
+> Build Settings의 `Mach-O Type`을 지정해 설정해줄 수 있습니다.
+> 
+> → Mach-O 타입에 대해 자세한 내용은 [여기](https://levenshtein.tistory.com/661)서 참고하면 좋을 듯 싶습니다.
+> ![](https://i.imgur.com/NCNtKIi.png)
+> 
+> Framework가 **Static** 일 때는 Embed 설정을 “Do not Embed”로 바꿔줄 수 있습니다.
+> 
+> ![](https://i.imgur.com/UW4BU46.png)
+> 
+> 이미 실행 바이너리 파일에 포함된 코드가 중복되어 생성되는 것을 방지할 수 있습니다.
+> 
+> 반대로 Dynamic일 때는 실행 파일에 코드가 포함되어 있지 않기 때문에 **Embed & Sign**으로 설정해줘야 합니다.
+> 
+> 그렇지 않으면..?
+> 
+> **`dyld[63497]: Symbol not found`**
+> 
+> 예.. 이 에러 보실 수 있습니다 👍
+
+## Package
+
+Package는 소스 파일, 바이너리 파일, 그리고 리소스를 번들링하는 WWDC18에서 새롭게 공개된 코드 공유 방식입니다.
+
+기존 xcframework와 유사하지만, 아주 큰 차이점이 하나 있습니다.
+
+바로 번들의 결과가 바이너리 파일이 아니라, 소스코드들로 이루어져 있다는 점입니다.
+
+![](https://i.imgur.com/kNfRic3.png)
+
+그렇기 때문에 Package는 오픈소스에 더 어울리는 방식입니다.
+
+실제로 SPM을 지원하는 서드파티 라이브러리들을 보면 `Package.swift` 파일과 `Sources` 안의 소스 파일들이 온전히 Swfit 파일로 들어있죠.
+
+그리고 Package의 큰 장점 중 하나는 번들에 대한 설정을 무려 Swift 언어로 할 수 있다는 점입니다.
+
+앞서 언급했던 `Package.swift` 파일이 일종의 manifest 파일로 사용되기 때문입니다.
+
+해당 파일에는 패키지의 이름, 의존성, 리소스 등에 대한 명시를 포함됩니다.
+
+SPM은 GitHub에 올라가있는 remote 패키지를 추가하는 방식으로 많이 쓰이지만, 로컬에 있는 패키지를 추가할 수도 있습니다.
+
+Package로 프로젝트를 정렬하는 것은 애플이 권장하는 방식이기도 합니다.
+
+[Organizing your code with local packages | Apple Developer Documentation](https://developer.apple.com/documentation/xcode/organizing-your-code-with-local-packages)
+
+# 결과
+
+MusicSpot 팀은 모듈화에 Swift Package Manager와 Package를 사용하기로 결정했습니다.
+
+결정 이유는 다음과 같습니다.
+
+1. GitHub에 공개 레포지토리로 올라가기 때문에 바이너리 파일로 공유하는 xcframework의 방식을 사용할 필요가 없다는 점
+2. 패키지에 대한 설정을 Swift 언어로 하기 때문에, xcodeproj 파일에서 일어나는 힘겨운 컨플릭트 대신 Swift 언어로 컨플릭트에 대응할 수 있다는 점
+3. Package는 내부에 Library, Framework를 포함하여 사용된다는 점
+
+### 참고 문서
+
+- 참고 문서
+    
+    [**빌드 결과로 보는 Static Framework와 Dynamic Framework**](https://sujinnaljin.medium.com/ios-%EB%B9%8C%EB%93%9C-%EA%B2%B0%EA%B3%BC%EB%A1%9C-%EB%B3%B4%EB%8A%94-static-framework-%EC%99%80-dynamic-framework-8568c5840e59)
+    
+    **[Link fast: Improve build and launch times — Static Linking](https://sujinnaljin.medium.com/wwdc-link-fast-improve-build-and-launch-times-static-linking-80000384cad8)**
+    
+    **[Link fast: Improve build and launch times — Dynamic Linking](https://sujinnaljin.medium.com/wwdc-link-fast-improve-build-and-launch-times-dynamic-linking-a7da0ed3c33e)**
+    
+    **[Managing multiple projects and their dependencies](https://developer.apple.com/documentation/xcode/managing-multiple-projects-and-their-dependencies)**
+    
+    [(Static / Dynamic) Library](https://zeddios.tistory.com/1308)
+    
+    [Xcode modules, Framework and Libraries Comparison](https://codedstuff.com/xcode-modules-framework-and-libraries-comparison/)
+    
+    **[workspace란 무엇인가](https://sujinnaljin.medium.com/xcode-workspace%EB%9E%80-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80-2140fda6ccd5)**
