@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "data/blog/Swift/22.Library,Framework,Package.mdx",
+                "file": "data/blog/Swift/22.Library_Framework_Package.mdx",
                 "mode": "source",
                 "backlinks": true,
                 "source": false
@@ -86,7 +86,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "data/blog/Swift/22.Library,Framework,Package.mdx",
+                "file": "data/blog/Swift/22.Library_Framework_Package.mdx",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "data/blog/Swift/22.Library,Framework,Package.mdx",
+                "file": "data/blog/Swift/22.Library_Framework_Package.mdx",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               }
@@ -126,7 +126,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "data/blog/Swift/22.Library,Framework,Package.mdx"
+                "file": "data/blog/Swift/22.Library_Framework_Package.mdx"
               }
             }
           },
@@ -168,7 +168,7 @@
   "active": "14b8be8d15ab6bf8",
   "lastOpenFiles": [
     "data/blog/Swift/21.Rx2Combine.mdx",
-    "data/blog/Swift/22.Library,Framework,Package.mdx",
+    "data/blog/Swift/22.Library_Framework_Package.mdx",
     "data/blog/Swift/20.LLDB.mdx",
     "data/blog/Swift/22.RxCombineMulticast.mdx",
     "data/blog/Swift/23.MusicSpot.mdx",
