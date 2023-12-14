@@ -1,0 +1,111 @@
+---
+title: 🍎 Swift - 추상화로 협업하기
+date: 2023-12-11
+tags:
+  - Swift
+  - MusicSpot
+draft: false
+summary: 팀원아! 작업 언제 끝나!? 나 그거 필요해!
+---
+
+<TOCInline toc={props.toc} indentDepth={2} />
+
+# 배경
+
+- 팀원아! 작업 언제 끝나!? 나 그거 필요해!
+    - 미안! 하루는 더 해야할 것 같은데!?
+    - 어….? 나 붕 뜨는데….!? 프로토콜이라도 줘!
+    - 오…! 천잰데?
+
+# 과정
+
+오늘은 간단하게 팀원과의 협업 시 의존성을 최대한 끊어낸 방법을 소개해 드리려고 합니다.
+
+사실 너무 간단하지만.. 이걸 생각해내고 하고 있다는 저 자신이 조금은 성장했나? 싶은 모먼트였거든요.
+
+뿌듯해서라도 남겨둬야겠습니다 ㅎㅎ
+
+```swift
+final class JourneyRepositoryImplementation: JourneyRepository {
+	private let storage = PersistentStorage()
+	
+	func startJourney(_ recordingJourney: RecordingJourney) -> Result<RecordingJourney, Error> {
+		do {
+			let result = await networking.request(.startJourney(recordingJourney))
+			switch result {
+			case .success(let startedJourney):
+				self.storage.setRecordingJourney(startedJourney) // 🚧
+				return .success(startedJourney)
+			case .failure(let error):
+				return .failure(error)
+			}
+		}
+	}
+}
+```
+
+자 제가 구현하고 있던 `JourneyRepository`입니다.
+
+구현 중에 로컬 스토리지에 데이터를 저장하는 로직이 필요해졌습니다. (🚧 부분)
+
+그래서 해당 작업을 하고 있던 팀원에게 상황을 여쭤봤는데...
+
+```swift
+final class PersistentStorage {
+	func setRecordingJourney(_ recordingJourney: RecordingJourney) {
+		// ...
+	}
+}
+```
+
+다른 작업을 하시느라 해당 로직은 아직 없다는 겁니다..!
+
+이 때 저는 어떻게 해야할까요?
+
+해당 팀원이 작업을 마칠 때까지 다른 작업을 해도 되겠지만..
+
+해당 로직이 당장 필요하다면..?
+
+이 때 **추상화**가 제 머리속을 스쳤습니다.
+
+### 프로토콜이라도 먼저 주세요!
+
+팀원에게 요청한 것은 추상화를 한 후 **프로토콜을 넘겨달라**는 작업이였습니다.
+
+대략 10분 정도의 시간이 지난 후 팀원은 프로토콜을 저에게 전달해주었습니다.
+
+```swift
+protocol Persistable {
+	func setRecordingJourney(_ recordingJourney: RecordingJourney) throws
+}
+```
+
+오..! 변경점이 거의 없이 `throw`만 추가되어 왔네요.
+
+```swift
+private let storage: Persistable
+
+init(storage: Persistable) {
+	self.storage = storage
+}
+
+try self.storage.setRecordingJourney(startedJourney)
+```
+
+이제 제 코드는 아무 문제 없이 빌드됩니다.
+
+(물론 실제 기능은 하지 않겠지만요)
+
+원격 저장소에 Push도 가능하고, CI도 제대로 돌겠죠!
+
+# 결과
+
+이 경험을 배경으로 저희는 프로토콜을 먼저 주고받는 작업을 습관화 했습니다.
+
+덕분에 시간이 부족할 것 같았던 구현 시간 안에 모든 핵심 기능들을 추가할 수 있었습니다.
+
+추상화가 협업의 관점에서도 좋다는 이야기를 익히 들었는데,
+
+이번 기회에 확실하게 체감할 수 있었습니다. 👍
+
+### 참고 문서

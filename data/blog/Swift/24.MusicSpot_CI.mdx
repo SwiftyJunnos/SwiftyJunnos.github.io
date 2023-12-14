@@ -1,0 +1,155 @@
+---
+title: 🍎 Swift - MusicSpot CI 적용기
+date: 2023-11-28
+tags:
+  - Swift
+  - MusicSpot
+draft: false
+summary: 모듈로 나뉜 구조에서 CI는 어떤 형태이면 좋을까?
+---
+
+<TOCInline toc={props.toc} indentDepth={2} />
+
+# 배경
+
+MusicSpot은 여러 모듈로 이루어져 있습니다.
+
+앱 프로젝트 하나만 빌드하면 됐던 이전에 경험했던 CI와는 다르게 각 모듈을 찾아내서 각각 빌드해야할 것 같은데..
+
+어떻게 해야할까요?
+
+# 과정
+
+MusicSpot은 모듈러 아키텍처를 사용하고 있습니다.
+
+그렇기 때문에 하나의 앱 타겟에 모든 소스가 있는 것이 아니라 각 패키지가 각각의 소스 코드를 포함하고 있습니다.
+
+이후에 하나의 앱 타겟에서 모든 패키지를 Dependency로 갖게되면, 앱 타겟 하나만 빌드해줘도 테스트가 될테지만,
+
+그 전에는 어떻게 해야할까요?
+
+각 모듈을 찾아내서 빌드하는 여정... 시작합니다..
+
+## 사용하는 모듈들을 찾아내기
+
+각 모듈들을 빌드하려면, 우선 어떤 모듈들이 있는지부터 확인해야 했습니다.
+
+`xcodebuild`가 다행히 list를 뽑아내는 명령어를 제공하고 있었습니다.
+
+```zsh
+xcodebuild -workspace MusicSpot.xcworkspace -list
+```
+
+MusicSpot 워크스페이스에 모든 패키지들을 추가해줌으로써 관리하는 패키지들을 찾아낼 수 있었습니다.
+
+![](https://i.imgur.com/HHOXVTD.jpg)
+
+그런데 결과가 굉장히 기네요..!?
+
+저희가 원하는 건 가장 밑에 있는 `Schemes`에 대한 정보입니다.
+
+```zsh
+for scheme in $(xcodebuild -workspace ${{ env.WORKSPACE }} -list | grep -A 100 "Schemes:" | grep -v "Schemes:" | sed '/^$/d' | sed 's/^[ \t]*//')
+```
+
+1. `grep -A 100 "Schemes:" - `Schemes:`라는 단어를 찾아서 해당 단어부터 100개의 줄을 따옵니다.
+2. `grep -v "Schemes:"` - 그후 반대로 `Schemes:`라는 단어를 가지지 않은 문장들을 따옵니다.
+
+여기까지 하면 목록들을 얻을 수 있습니다.
+
+추가적으로 탭과 가끔 생기는 Next-Line들을 제거해줘야하기 때문에
+3. `sed '/^$/d'`와 `sed 's/^[ \t]*//'`로 공란들을 제거해줍니다.
+
+## matrix
+
+이렇게 추출한 Scheme들.. 순차적으로 하나하나 빌드하면 한세월이겠죠?
+
+그래서 이걸 비동기적으로 처리할 수 있는 방법이 없나 찾아보던 와중
+
+GitHub Action에 matrix라는 기능이 있다는 것을 알았습니다.
+
+```
+jobs:
+  example_matrix:
+    strategy:
+      matrix:
+        version: [10, 12, 14]
+        os: [ubuntu-latest, windows-latest]
+```
+
+이런 식으로 matrix를 정의해주면, 주어진 각 값들을 한 번씩 매칭시켜서 같은 동작을 수행시켜줍니다.
+
+```
+- `{version: 10, os: ubuntu-latest}`
+- `{version: 10, os: windows-latest}`
+- `{version: 12, os: ubuntu-latest}`
+- `{version: 12, os: windows-latest}`
+- `{version: 14, os: ubuntu-latest}`
+- `{version: 14, os: windows-latest}`
+```
+
+이렇게 version 3개, os 2개의 조합으로 6개의 케이스가 생기겠네요.
+
+그런데 저희는 이렇게 조합을 사용할 건 아니고, 이 조합을 한 번에 돌린다는 점을 활용할겁니다.
+
+```
+matrix="{\"include\":["
+for scheme in Schemes ...
+	if [ "$first_entry" = true ]; then
+	  first_entry=false
+	else
+	  matrix+=","
+	fi
+	matrix+="{\"scheme\":\"$scheme\"}"
+done
+matrix+="]}"
+echo "matrix=$matrix" >> $GITHUB_OUTPUT
+```
+
+matrix는 key-value의 형식을 따라야하기 때문에
+
+```json
+{
+	"include": [
+		{
+			"scheme": "MusicSpot"
+		},
+		{
+			"scheme": "MusicSpot-Release"
+		},
+		...
+	]
+}
+```
+
+이렇게 "scheme"을 key 값으로 갖는 Scheme Value들을 만들어주었습니다.
+
+이렇게 추가한 matrix는 이후 빌드 action 쪽에서
+
+```
+xcode-build:
+needs: prepare-matrix
+runs-on: macos-13
+strategy:
+  fail-fast: false
+  matrix: ${{fromJson(needs.prepare-matrix.outputs.matrix)}} // ✅
+```
+
+이렇게 JSON 파싱을 통해 사용할 수 있습니다.
+
+# 결과
+
+![](https://i.imgur.com/nTUyzBO.png)
+
+이렇게 저희 추가한 Scheme들이 병렬적으로 한 번에 돌아가는 것을 확인했습니다.
+
+조금 걸리는 점들이 남아있긴 합니다.
+
+1. 변경된 파일과 상관없이 모든 Scheme들의 검사가 이루어지고 있다는 점
+2. 이후 앱 타겟에 모든 Dependency가 추가되면, 그 이후에도 이렇게 모든 Scheme을 검사할 필요가 있을까 하는 의문
+
+아마 프로젝트 기간동안은 이대로 계속 사용하고,
+
+이후에 추가적으로 진행하게 된다면 고민해보고 수정할 것 같네요.
+
+### 참고 문서

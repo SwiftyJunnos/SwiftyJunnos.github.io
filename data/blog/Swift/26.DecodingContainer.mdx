@@ -1,0 +1,178 @@
+---
+title: 🍎 Swift - Decoder의 Container
+date: 2023-12-09
+tags:
+  - Swift
+  - MusicSpot
+draft: false
+summary: 인코딩, 디코딩 예민하네~ 화났네~
+---
+
+<TOCInline toc={props.toc} indentDepth={2} />
+
+# 배경
+
+- 뭐만 하면 디코딩 에러!
+    - 너무 예민보스인 `Encodable`과 `Decodable`
+
+# 과정
+
+이번 프로젝트를 진행하며 예상치 못 한 인코딩/디코딩 에러들을 마주쳤습니다.
+
+어설프게 알고 있던 지식들과 실수들이 문제였는데요, 다시는 이런 일이 일어나지 않도록 메모해두려고 합니다.
+
+## Container
+
+```swift
+let container = try decoder.singleValueContainer()
+let coordinates = try container.decode([Double].self)
+```
+
+인코딩과 디코딩을 할 때 사용하는 Container.. 정확히 어떻게 사용하는지 알고 계신가요?
+
+저는 잘 몰라서 ㅎ.. 이번에 한 번 알아봤습니다.
+
+```swift
+// Data: [23.538399, -138.438982]
+public init(from decoder: Decoder) throws {
+	let container = try decoder.unkeyedContainer()
+	let coordinates = try container.decode([Double].self)
+	guard coordinates.count == 2 else {
+		throw DecodingError.dataCorruptedError(in: container,
+												   debugDescription: "Coordinate 값은 2개 값으로 이루어진 배열이어야 합니다.")
+	}
+	self.latitude = coordinates[0]
+	self.longitude = coordinates[1]
+}
+```
+
+참고로 문제가 됐던 코드는 위 코드입니다.
+
+어떤 부분이 문제인지 모르시겠다면.. 따라오시죠.
+
+### KeyedDecodingContainer
+
+`CodingKey`를 사용하는 방식입니다.
+
+```swift
+// Data:
+// {
+//   "name": "S045 이창준"
+//   "id": "1D723110-BD79-4839-9A30-1629BF49CFE8"
+// }
+
+struct SomeData: Decodable {
+	var name: String?
+	let id: UUID
+
+	enum CodingKeys: String, CodingKey {
+	case name = "title"
+	case id = "_id"
+	}
+}
+```
+
+CodingKey 프로토콜을 채택하는 열거형을 만들어 매칭시켜 사용하는 방법입니다.
+
+```swift
+init(from decoder: Decoder) throws {
+	let container = try decoder.container(keyedBy: CodingKeys.self)
+	self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+	self.id = try container.decode(UUID.self, forKey: .id)
+}
+```
+
+일반적으로 많이 사용되는 방식이고, 저 또한 익숙했기 때문에 넘어가겠습니다.
+
+### SingleValueContainer
+
+문제가 되었던 SingleValueContainer입니다.
+
+그런데 사실, 잘 알고 있으면 이거만큼 간단한 것도 없습니다.
+
+말 그대로 단순히 하나의 값만 띡 들어왔을 때 사용되기 때문입니다.
+
+```swift
+// Data: "S045 이창준"
+
+struct OneData: Decodable {
+	let name: String
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		self.name = try container.decode(String.self)
+	}
+}
+```
+
+네.. 알고보니까 참 쉽죠..
+
+### UnkeyedContainer
+
+UnkeyedContainer 같은 경우가 조금 헷갈리면서도 특이합니다.
+
+배열로 값이 들어오는데, 그 타입들이 제각각일 때 사용됩니다.
+
+```swift
+// Data: ["S045 이창준", 0.45, true, 28]
+
+struct UnkeyedData: Decodable {
+	var name: String?
+	var id: Double?
+	var isCheckedIn: Bool?
+	var age: Int?
+
+	init(from decoder: Decoder) throws {
+		var container = try decoder.unkeyedContainer()
+		self.name = try container.decode(String?.self)
+		self.id = try container.decode(Double?.self)
+		self.isCheckedIn = try container.decode(Bool?.self)
+		self.age = try container.decode(Int?.self)
+	}
+}
+```
+
+배열 안에 여러 타입들이 있지만, 프로퍼티 순서대로 매칭해 디코딩해줍니다.
+
+## 에러 해결
+
+```swift
+// Data: [23.538399, -138.438982]
+public init(from decoder: Decoder) throws {
+	let container = try decoder.unkeyedContainer()
+	let coordinates = try container.decode([Double].self)
+	guard coordinates.count == 2 else {
+		throw DecodingError.dataCorruptedError(in: container,
+												   debugDescription: "Coordinate 값은 2개 값으로 이루어진 배열이어야 합니다.")
+	}
+	self.latitude = coordinates[0]
+	self.longitude = coordinates[1]
+}
+```
+
+그럼 돌아가서 이 코드는 뭐가 문제였을까요?
+
+방식은 `singleValueContainer` 방식을 쓰고 있지만, `unkeyedContainer`를 쓰고 있기 때문입니다.
+
+UnkeyedContainer를 사용할 수도 있겠죠.
+
+```swift
+// Data: [23.538399, -138.438982]
+public init(from decoder: Decoder) throws {
+	var container = try decoder.unkeyedContainer()
+	self.latitude = try container.decode(Double.self)
+	self.longitude = try contianer.decode(Double.self)
+}
+```
+
+이렇게 사용할 수도 있었을 겁니다.
+
+# 결과
+
+잘 사용하지 않던 decode 방식에 대해 이번 기회에 다시 알아봤습니다.
+
+그냥 느낌대로 쓰던 느낌이 있었는데 지금이라도 알아보게 되어서 다행이네요.
+
+현업에 가면 이 문제가 상당히 클 것 같은데 어떻게 해결할지도 궁금합니다.
+
+### 참고 문서
