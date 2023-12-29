@@ -167,8 +167,9 @@
   },
   "active": "14b8be8d15ab6bf8",
   "lastOpenFiles": [
-    "data/blog/iOS/12.SignInWithApple.mdx",
+    "data/blog/Swift/06.MVVM_CleanArchitecture02.mdx",
     "data/blog/iOS/13.Modularization.mdx",
+    "data/blog/iOS/12.SignInWithApple.mdx",
     "data/blog/Swift/27.Abstraction_Coop.mdx",
     "data/blog/iOS/13.ViewController_With_2_ViewModels.mdx",
     "data/blog/iOS/14.MusicKit.mdx",
@@ -177,7 +178,6 @@
     "data/blog/Swift/24.MusicSpot_CI.mdx",
     "data/blog/Swift/23.URLProtocol.mdx",
     "data/blog/Swift/22.Library_Framework_Package.mdx",
-    "data/blog/Swift/21.Rx2Combine.mdx",
     "node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/core/README.md",
     "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/core/README.md",
     "node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base/README.md",
