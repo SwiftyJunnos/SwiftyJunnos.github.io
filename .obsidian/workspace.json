@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "data/blog/iOS/13.Modularization.mdx",
+                "file": "data/blog/Swift/29.Coordinator02.mdx",
                 "mode": "source",
                 "backlinks": true,
                 "source": false
@@ -86,7 +86,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "data/blog/iOS/13.Modularization.mdx",
+                "file": "data/blog/Swift/29.Coordinator02.mdx",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "data/blog/iOS/13.Modularization.mdx",
+                "file": "data/blog/Swift/29.Coordinator02.mdx",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               }
@@ -126,7 +126,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "data/blog/iOS/13.Modularization.mdx"
+                "file": "data/blog/Swift/29.Coordinator02.mdx"
               }
             }
           },
@@ -167,17 +167,17 @@
   },
   "active": "14b8be8d15ab6bf8",
   "lastOpenFiles": [
-    "data/blog/Swift/06.MVVM_CleanArchitecture02.mdx",
-    "data/blog/iOS/13.Modularization.mdx",
-    "data/blog/iOS/12.SignInWithApple.mdx",
+    "data/blog/Swift/22.Library_Framework_Package.mdx",
+    "data/blog/Swift/21.Rx2Combine.mdx",
+    "data/blog/Swift/29.Coordinator02.mdx",
+    "data/blog/Swift/26.DecodingContainer.mdx",
+    "data/blog/Swift/07.Coordinator.mdx",
+    "data/blog/Swift/28.Modularization.mdx",
     "data/blog/Swift/27.Abstraction_Coop.mdx",
+    "data/blog/Swift/06.MVVM_CleanArchitecture02.mdx",
+    "data/blog/iOS/12.SignInWithApple.mdx",
     "data/blog/iOS/13.ViewController_With_2_ViewModels.mdx",
     "data/blog/iOS/14.MusicKit.mdx",
-    "data/blog/Swift/26.DecodingContainer.mdx",
-    "data/blog/Swift/25.DomainLayer.mdx",
-    "data/blog/Swift/24.MusicSpot_CI.mdx",
-    "data/blog/Swift/23.URLProtocol.mdx",
-    "data/blog/Swift/22.Library_Framework_Package.mdx",
     "node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/core/README.md",
     "node_modules/@opentelemetry/exporter-trace-otlp-grpc/node_modules/@opentelemetry/core/README.md",
     "node_modules/@opentelemetry/otlp-transformer/node_modules/@opentelemetry/sdk-trace-base/README.md",
